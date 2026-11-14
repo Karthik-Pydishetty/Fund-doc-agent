@@ -24,7 +24,7 @@ def newest_per_model(split: str) -> list[Path]:
     seen: dict[str, Path] = {}
     for log in sorted((ROOT / "runs").glob("*_pipeline.jsonl"), reverse=True):
         header = json.loads(log.open().readline())
-        if split_of(header) == split and header["model"] not in seen:
+        if split_of(header) == split and header["model"] not in seen and not header.get("inject_faults"):
             seen[header["model"]] = log
     return [seen[m] for m in sorted(seen)]
 

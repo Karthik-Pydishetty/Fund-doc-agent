@@ -45,7 +45,7 @@ main.py               runs the full pipeline
 5. **Eval harness**: field-level accuracy vs ground truth (numbers within tolerance, dates normalized, strings fuzzy-matched), router accuracy, exception precision/recall. Log each run to `runs/*.jsonl` (timestamp, model, prompt versions, metrics). Save a baseline; pytest regression test fails if any field's accuracy drops more than 5 points vs baseline.
 6. **README**: problem, architecture diagram, results table from the latest run, how to run.
 7. **Hard split + Sonnet vs. Haiku**: a second, harder test set in `data/hard/` (own ground truth, own baseline; `data/` untouched). Run v1 prompts on it with Sonnet and Haiku side by side (accuracy, router, exceptions, cost, latency, every missed field). Sonnet v1 becomes the hard-split baseline.
-8. **v2 prompts for hard-split misses**: only if Sonnet misses fields on the hard split. Target those misses; must not regress the main split.
+8. ~~**v2 prompts for hard-split misses**~~ **Skipped**: v1 prompts scored 100% field accuracy on both splits with both Sonnet and Haiku, so there were no misses to target.
 9. **Self-correction loop**: when validation fails or confidence is low, re-ask the extractor with the specific problem, bounded retries; must never "fix" a document that is genuinely inconsistent.
 10. **Read-only MCP server**: e.g. `get_fund_summary(fund_name)` over logged, validated results. No writes, no pipeline runs.
 11. **Final README update**: hard split, model comparison, v2 and self-correction results, MCP usage.
@@ -84,6 +84,7 @@ main.py               runs the full pipeline
 - Regression gate (offline, part of `pytest`): `tests/test_regression.py` vs `evals/baseline.json`; `EVAL_LOG=path pytest tests/test_regression.py` to check a specific log
 - Hard split: `python -m generator.hard` (writes data/hard/ only); `python -m evals.run_eval --split hard [--model claude-haiku-5-5]`; regression gate checks each split vs its own baseline (`evals/baseline.json`, `evals/baseline_hard.json`) using the newest run by the baseline's model
 - Model comparison (offline): `python -m evals.compare_models --split hard` (or pass two run logs)
+- Self-correction: `--self-correct` on main.py / run_eval (one retry on finance-rule failures; changed values need a verbatim quote checked in code). Measure it with `--inject-faults N [--fault-seed S]` (experiment runs; ignored by the regression gate, never saved as a baseline), then `python -m evals.self_correction`
 
 ## Current phase
-Phase 8
+Phase 10

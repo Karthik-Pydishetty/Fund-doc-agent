@@ -86,7 +86,8 @@ def main() -> None:
         except ValueError as e:
             ap.error(str(e))
         log, header, records = run_pipeline(pdfs_from_args(args), get_client(model=args.model), prompts,
-                                            args.workers, split=args.split)
+                                            args.workers, split=args.split, self_correct=args.self_correct,
+                                            inject_faults=args.inject_faults, fault_seed=args.fault_seed)
         print_summary(log, header, records)
 
     split = split_of(header)
@@ -95,9 +96,13 @@ def main() -> None:
     print_report(rec)
     print(f"Eval record appended to {log.relative_to(ROOT) if log.is_relative_to(ROOT) else log}")
 
+    if args.save_baseline and header.get("inject_faults"):
+        sys.exit("refusing to save a fault-injected run as a baseline")
     if args.save_baseline:
         save_baseline(log, rec, baseline)
         print(f"Baseline written to {baseline.relative_to(ROOT)}")
+    elif header.get("inject_faults"):
+        print("Regression check skipped: fault-injection runs are experiments, not candidates for the gate")
     elif baseline.exists():
         base = json.loads(baseline.read_text())
         if base.get("model", rec["model"]) != rec["model"]:

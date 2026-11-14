@@ -26,11 +26,15 @@ FIELD_DROP_POINTS = 5.0
 EPS = 1e-9
 
 
-def latest_run_log(runs_dir: Path = RUNS, split: str = "main", model: str | None = None) -> Path | None:
-    """Newest pipeline log for a split (and model, if given), read from each log's header line."""
+def latest_run_log(runs_dir: Path = RUNS, split: str = "main", model: str | None = None,
+                   include_fault_injected: bool = False) -> Path | None:
+    """Newest pipeline log for a split (and model, if given), read from each log's header line.
+    Fault-injection runs are experiments and are skipped unless asked for."""
     for log in sorted(runs_dir.glob("*_pipeline.jsonl"), reverse=True):
         with log.open() as fh:
             header = json.loads(fh.readline())
+        if header.get("inject_faults") and not include_fault_injected:
+            continue
         if split_of(header) == split and model in (None, header.get("model")):
             return log
     return None

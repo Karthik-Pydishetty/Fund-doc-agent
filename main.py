@@ -20,7 +20,10 @@ from pathlib import Path
 
 from agents.llm_client import LLMClient, get_client
 from config import MODEL
+from agents.faults import inject_faults as inject_fault_records
+from agents.pdf_text import pdf_to_text
 from agents.pipeline import process, resolve_prompts
+from agents.self_correct import finance_issues, self_correct as run_self_correct
 from validation.validate import EXCEPTION, validate_records, write_exceptions_report
 
 ROOT = Path(__file__).resolve().parent
@@ -29,18 +32,37 @@ RUNS = ROOT / "runs"
 REPORT = ROOT / "exceptions_report.csv"
 
 
-def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], workers: int = 5,
-                 runs_dir: Path = RUNS, report: Path = REPORT, split: str = "main") -> tuple[Path, dict, list[dict]]:
-    started = dt.datetime.now(dt.timezone.utc)
-    t0 = time.perf_counter()
-    with ThreadPoolExecutor(workers) as pool:
-        records = list(pool.map(lambda p: process(p, client, prompts), pdfs))
-    wall_s = round(time.perf_counter() - t0, 2)
-
+def _validate_all(records: list[dict]) -> dict:
     results = {v.file: v for v in validate_records(records)}
     for r in records:
         v = results[r["file"]]
         r["validation"] = {"status": v.status, "issues": [i.to_dict() for i in v.issues]}
+    return results
+
+
+def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], workers: int = 5,
+                 runs_dir: Path = RUNS, report: Path = REPORT, split: str = "main", self_correct: bool = False,
+                 inject_faults: int = 0, fault_seed: int = 7) -> tuple[Path, dict, list[dict]]:
+    """First pass (route + extract) -> validate -> [inject faults] -> [one self-correction retry] -> log."""
+    started = dt.datetime.now(dt.timezone.utc)
+    t0 = time.perf_counter()
+    with ThreadPoolExecutor(workers) as pool:
+        records = list(pool.map(lambda p: process(p, client, prompts), pdfs))
+    _validate_all(records)
+
+    fault_summary = inject_fault_records(records, inject_faults, fault_seed) if inject_faults else None
+    retry_s = 0.0
+    if self_correct:
+        by_name = {p.name: p for p in pdfs}
+        todo = [r for r in records if finance_issues(r)]
+        t1 = time.perf_counter()
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(lambda r: run_self_correct(r, pdf_to_text(by_name[r["file"]]), client,
+                                                     prompts[r["route"]["doc_type"].lower()]), todo))
+        retry_s = round(time.perf_counter() - t1, 2)
+    wall_s = round(time.perf_counter() - t0, 2)
+
+    results = _validate_all(records)
     write_exceptions_report(sorted(results.values(), key=lambda v: v.doc_id), report)
 
     calls = [c for r in records for c in r["calls"].values()]
@@ -48,6 +70,8 @@ def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], w
         "timestamp": started.isoformat(), "kind": "pipeline", "split": split, "provider": client.provider,
         "model": client.model,
         "prompt_versions": prompts, "n_docs": len(records), "workers": workers, "wall_s": wall_s,
+        "self_correct": self_correct, "retry_wall_s": retry_s if self_correct else None,
+        "inject_faults": inject_faults, "fault_summary": fault_summary,
         "routes": dict(Counter(r["route"]["doc_type"] if r["route"] else "ERROR" for r in records)),
         "n_errors": sum(bool(r["error"]) for r in records),
         "n_exceptions": sum(v.status == EXCEPTION for v in results.values()),
@@ -72,6 +96,12 @@ def add_pipeline_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--prompt", action="append", default=[], metavar="STAGE=VERSION",
                     help="use another prompt version, e.g. --prompt cas=v2 (repeatable; stages: "
                          "router, cas, soi, letter)")
+    ap.add_argument("--self-correct", action="store_true",
+                    help="retry once, with the validator's findings, on docs that fail a finance rule")
+    ap.add_argument("--inject-faults", type=int, default=0, metavar="N",
+                    help="experiment: corrupt one rule-breaking field in N seeded-random clean docs after the "
+                         "first pass (logged; such runs are ignored by the regression gate)")
+    ap.add_argument("--fault-seed", type=int, default=7)
     ap.add_argument("files", nargs="*", help="specific PDF names inside --data (default: all)")
 
 
@@ -102,7 +132,8 @@ def main() -> None:
     except ValueError as e:
         ap.error(str(e))
     log, header, records = run_pipeline(pdfs_from_args(args), get_client(model=args.model), prompts, args.workers,
-                                        split=args.split)
+                                        split=args.split, self_correct=args.self_correct,
+                                        inject_faults=args.inject_faults, fault_seed=args.fault_seed)
     print_summary(log, header, records)
 
 

@@ -129,8 +129,23 @@ def block_doc021(log: Path) -> str:
             f"`{issue.rule}` rule caught it.")  # inline block: no newline
 
 
+def block_confidence(log: Path) -> str:
+    """Confidence is miscalibrated both ways: high on a broken doc (main split), low on a correct one (hard split)."""
+    high = block_doc021(log)
+    hard_log = ROOT / regression.load_baseline(regression.BASELINES["hard"])["source_log"]
+    _, records, _ = scoring.load_log(hard_log)
+    r = next(x for x in records if x["file"] == "hard_010.pdf")
+    truth = next(d for d in scoring.load_truth("hard") if d["file"] == "hard_010.pdf")
+    wrong = sum(1 for k, g, *_rest, ok in scoring.score_doc(truth, r) if not ok)
+    low = (f" The opposite also happens: in `{_rel(hard_log)}`, hard_010 (long exposure given only as a share of "
+           f"gross, so long, short and net must be computed) was extracted with {wrong} wrong fields, yet the "
+           f"extractor reported confidence {r['extracted']['confidence']}, below the {MIN_CONFIDENCE:g} threshold, "
+           f"so a correct document went to exceptions. The threshold is unchanged for now.")
+    return high + low  # inline block: no newline
+
+
 def render_blocks(log: Path) -> dict[str, str]:
-    return {"results": block_results(log), "tolerances": block_tolerances(), "doc021": block_doc021(log)}
+    return {"results": block_results(log), "tolerances": block_tolerances(), "confidence": block_confidence(log)}
 
 
 def apply_blocks(text: str, blocks: dict[str, str]) -> str:
