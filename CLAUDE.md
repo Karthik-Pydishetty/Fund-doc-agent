@@ -86,4 +86,4 @@ main.py               runs the full pipeline
 - Model comparison (offline): `python -m evals.compare_models --split hard` (or pass two run logs)
 
 ## Current phase
-Phase 7
+Phase 8

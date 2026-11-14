@@ -1,0 +1,74 @@
+{
+  "split": "hard",
+  "source_log": "runs/20261114T024254Z_pipeline.jsonl",
+  "created": "2026-11-14T02:44:56.904512+00:00",
+  "git": {
+    "commit": "e293e6ea8de6b6818e61d2516fabe073d9e4f18b",
+    "dirty": false
+  },
+  "model": "claude-sonnet-5-5",
+  "prompt_versions": {
+    "router": "router_v1",
+    "cas": "cas_v1",
+    "soi": "soi_v1",
+    "letter": "letter_v1"
+  },
+  "metrics": {
+    "n_docs": 10,
+    "router_accuracy": 1.0,
+    "field_accuracy_overall": 1.0,
+    "doc_type_accuracy": {
+      "CAS": 1.0,
+      "LETTER": 1.0,
+      "SOI": 1.0
+    },
+    "field_accuracy": {
+      "CAS.fund_name": 1.0,
+      "CAS.manager": 1.0,
+      "CAS.investor_name": 1.0,
+      "CAS.period_start": 1.0,
+      "CAS.period_end": 1.0,
+      "CAS.currency": 1.0,
+      "CAS.beginning_nav": 1.0,
+      "CAS.contributions": 1.0,
+      "CAS.distributions": 1.0,
+      "CAS.management_fees": 1.0,
+      "CAS.incentive_fees": 1.0,
+      "CAS.net_gain_loss": 1.0,
+      "CAS.ending_nav": 1.0,
+      "CAS.total_commitment": 1.0,
+      "CAS.unfunded_commitment": 1.0,
+      "LETTER.fund_name": 1.0,
+      "LETTER.quarter": 1.0,
+      "LETTER.long_exposure": 1.0,
+      "LETTER.short_exposure": 1.0,
+      "LETTER.gross_exposure": 1.0,
+      "LETTER.net_exposure": 1.0,
+      "LETTER.top_sector_exposures.exposure_pct": 1.0,
+      "LETTER.top_sector_exposures[present]": 1.0,
+      "LETTER.top_holdings.pct_of_nav": 1.0,
+      "LETTER.top_holdings[present]": 1.0,
+      "LETTER.quarterly_return": 1.0,
+      "SOI.fund_name": 1.0,
+      "SOI.as_of_date": 1.0,
+      "SOI.holdings.sector": 1.0,
+      "SOI.holdings.geography": 1.0,
+      "SOI.holdings.cost": 1.0,
+      "SOI.holdings.fair_value": 1.0,
+      "SOI.holdings.pct_of_nav": 1.0,
+      "SOI.holdings[present]": 1.0,
+      "SOI.total_fair_value": 1.0
+    },
+    "exceptions": {
+      "precision": 0.5,
+      "recall": 1.0,
+      "tp": [
+        "hard_006"
+      ],
+      "fp": [
+        "hard_010"
+      ],
+      "fn": []
+    }
+  }
+}
