@@ -11,3 +11,4 @@ MODEL = os.environ.get("FUND_AGENT_MODEL", "claude-sonnet-5-5")
 PRICING_PER_MTOK = {
     "claude-sonnet-5-5": (2.00, 10.00),
 }
+PRICING_PER_MTOK["claude-haiku-5-5"] = (0.10, 0.50)  # prompts up to 100K tokens

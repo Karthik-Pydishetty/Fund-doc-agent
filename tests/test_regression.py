@@ -1,8 +1,10 @@
-"""Phase 5 regression gate. Offline: reads the latest run log, never calls the API.
+"""Regression gate. Offline: reads run logs, never calls the API.
 
-test_no_regression_vs_baseline is the gate: it fails if, vs evals/baseline.json, any field's
-accuracy drops > 5 points, router accuracy drops, or exception recall drops. Point it at another
-log with EVAL_LOG=path/to/run.jsonl. The other tests prove the gate fails on degraded logs.
+test_no_regression_vs_baseline is the gate, once per split: the newest run of that split by the
+baseline's model must not, vs evals/baseline.json (main) or evals/baseline_hard.json (hard), drop
+any field's accuracy > 5 points, drop router accuracy, or drop exception recall. Point it at a
+specific log with EVAL_LOG=path/to/run.jsonl (its split comes from the log header). The other
+tests prove the gate fails on degraded logs.
 """
 import copy
 import json
@@ -12,22 +14,25 @@ from pathlib import Path
 import pytest
 
 from evals import regression
-from evals.scoring import compute_metrics, load_log
+from evals.scoring import compute_metrics, load_log, split_of
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _log_under_test() -> Path | None:
+@pytest.mark.parametrize("split", sorted(regression.BASELINES))
+def test_no_regression_vs_baseline(split):
     env = os.environ.get("EVAL_LOG")
-    return Path(env).resolve() if env else regression.latest_run_log()
-
-
-def test_no_regression_vs_baseline():
-    log = _log_under_test()
+    if env:
+        log = Path(env).resolve()
+        if split_of(load_log(log)[0]) != split:
+            pytest.skip(f"EVAL_LOG is not a {split}-split log")
+    else:
+        log = regression.gate_log(split)
     if log is None:
-        pytest.skip("no runs/*_pipeline.jsonl yet")
+        pytest.skip(f"no {split} baseline or no {split}-split run by the baseline's model yet")
     _, problems = regression.check_log(log)
-    assert not problems, f"Regression in {log.name} vs evals/baseline.json:\n  - " + "\n  - ".join(problems)
+    base = regression.BASELINES[split].relative_to(ROOT)
+    assert not problems, f"Regression in {log.name} vs {base}:\n  - " + "\n  - ".join(problems)
 
 
 # --------------------------------------------------------------------------- the gate actually bites

@@ -19,16 +19,18 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from agents.llm_client import LLMClient, get_client
+from config import MODEL
 from agents.pipeline import process, resolve_prompts
 from validation.validate import EXCEPTION, validate_records, write_exceptions_report
 
 ROOT = Path(__file__).resolve().parent
+SPLIT_DIRS = {"main": ROOT / "data", "hard": ROOT / "data" / "hard"}
 RUNS = ROOT / "runs"
 REPORT = ROOT / "exceptions_report.csv"
 
 
 def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], workers: int = 5,
-                 runs_dir: Path = RUNS, report: Path = REPORT) -> tuple[Path, dict, list[dict]]:
+                 runs_dir: Path = RUNS, report: Path = REPORT, split: str = "main") -> tuple[Path, dict, list[dict]]:
     started = dt.datetime.now(dt.timezone.utc)
     t0 = time.perf_counter()
     with ThreadPoolExecutor(workers) as pool:
@@ -43,7 +45,8 @@ def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], w
 
     calls = [c for r in records for c in r["calls"].values()]
     header = {
-        "timestamp": started.isoformat(), "kind": "pipeline", "provider": client.provider, "model": client.model,
+        "timestamp": started.isoformat(), "kind": "pipeline", "split": split, "provider": client.provider,
+        "model": client.model,
         "prompt_versions": prompts, "n_docs": len(records), "workers": workers, "wall_s": wall_s,
         "routes": dict(Counter(r["route"]["doc_type"] if r["route"] else "ERROR" for r in records)),
         "n_errors": sum(bool(r["error"]) for r in records),
@@ -61,7 +64,10 @@ def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], w
 
 
 def add_pipeline_args(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--data", default=str(ROOT / "data"))
+    ap.add_argument("--split", default="main", choices=["main", "hard"],
+                    help="which document set to run: data/ (main) or data/hard/ (hard)")
+    ap.add_argument("--data", help="override the folder of PDFs (default: the split's folder)")
+    ap.add_argument("--model", default=MODEL, help=f"model id (default: config.MODEL = {MODEL})")
     ap.add_argument("--workers", type=int, default=5)
     ap.add_argument("--prompt", action="append", default=[], metavar="STAGE=VERSION",
                     help="use another prompt version, e.g. --prompt cas=v2 (repeatable; stages: "
@@ -70,12 +76,13 @@ def add_pipeline_args(ap: argparse.ArgumentParser) -> None:
 
 
 def pdfs_from_args(args) -> list[Path]:
-    data = Path(args.data)
+    data = Path(args.data) if args.data else SPLIT_DIRS[args.split]
     return [data / f for f in args.files] if args.files else sorted(data.glob("*.pdf"))
 
 
 def print_summary(log: Path, header: dict, records: list[dict]) -> None:
-    print(f"Processed {header['n_docs']} docs with {header['model']}; prompts {header['prompt_versions']}")
+    print(f"Processed {header['n_docs']} {header['split']}-split docs with {header['model']}; "
+          f"prompts {header['prompt_versions']}")
     print(f"Routes: {header['routes']}")
     for r in records:
         if r["error"]:
@@ -94,7 +101,8 @@ def main() -> None:
         prompts = resolve_prompts(args.prompt)
     except ValueError as e:
         ap.error(str(e))
-    log, header, records = run_pipeline(pdfs_from_args(args), get_client(), prompts, args.workers)
+    log, header, records = run_pipeline(pdfs_from_args(args), get_client(model=args.model), prompts, args.workers,
+                                        split=args.split)
     print_summary(log, header, records)
 
 

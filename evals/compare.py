@@ -13,18 +13,19 @@ from collections import defaultdict
 from pathlib import Path
 
 from evals.scoring import (  # noqa: F401  (flatten/match/score_doc re-exported for callers)
-    TYPES, compute_metrics, flatten, load_log, load_truth, match, score_doc,
+    TYPES, compute_metrics, flatten, load_log, load_truth, match, score_doc, split_of,
 )
+from evals.regression import latest_run_log
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 
 
-def latest_log() -> Path:
-    logs = sorted(RUNS.glob("*_pipeline.jsonl"))
-    if not logs:
-        sys.exit("no runs/*_pipeline.jsonl; run `python main.py` first")
-    return logs[-1]
+def latest_log(split: str = "main") -> Path:
+    log = latest_run_log(split=split)
+    if log is None:
+        sys.exit(f"no {split}-split runs/*_pipeline.jsonl; run `python main.py --split {split}` first")
+    return log
 
 
 def fmt(v) -> str:
@@ -39,15 +40,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--log", help="pipeline log (default: newest runs/*_pipeline.jsonl)")
     ap.add_argument("--doc", help="print every field for one doc_id")
+    ap.add_argument("--split", default="main", help="used to pick the newest log when --log is not given")
     ap.add_argument("--no-color", action="store_true")
     args = ap.parse_args()
     red, green, bold, reset = (("", "", "", "") if args.no_color or not sys.stdout.isatty()
                                else ("\033[31m", "\033[32m", "\033[1m", "\033[0m"))
 
-    path = Path(args.log).resolve() if args.log else latest_log()
+    path = Path(args.log).resolve() if args.log else latest_log(args.split)
     header, recs, _ = load_log(path)
     by_file = {r["file"]: r for r in recs}
-    truth = [d for d in load_truth() if d["file"] in by_file]
+    truth = [d for d in load_truth(split_of(header)) if d["file"] in by_file]
 
     if args.doc:
         d = next(x for x in truth if x["doc_id"] == args.doc)
@@ -64,7 +66,8 @@ def main() -> None:
         return
 
     m = compute_metrics(recs, truth)
-    print(f"{bold}Run {path.name}{reset}  model={header['model']}  prompts={header['prompt_versions']}")
+    print(f"{bold}Run {path.name}{reset}  split={split_of(header)}  model={header['model']}  "
+          f"prompts={header['prompt_versions']}")
 
     print(f"\n{bold}Router accuracy: {m['router_accuracy']:.1%} ({m['n_docs']} docs){reset}")
     conf = m["router_confusion"]

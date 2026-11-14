@@ -16,8 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from evals.regression import BASELINE, find_regressions, latest_run_log
-from evals.scoring import compute_metrics, load_log
+from evals.regression import BASELINES, find_regressions, latest_run_log
+from evals.scoring import compute_metrics, load_log, split_of
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,17 +30,18 @@ def git_info() -> dict:
 
 
 def append_eval(log: Path, header: dict, metrics: dict) -> dict:
-    rec = {"kind": "eval", "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), "git": git_info(),
+    rec = {"kind": "eval", "split": split_of(header), "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+           "git": git_info(),
            "model": header["model"], "prompt_versions": header["prompt_versions"], "metrics": metrics}
     with log.open("a") as fh:
         fh.write(json.dumps(rec) + "\n")
     return rec
 
 
-def save_baseline(log: Path, rec: dict, path: Path = BASELINE) -> None:
+def save_baseline(log: Path, rec: dict, path: Path) -> None:
     m = {k: rec["metrics"][k] for k in ("n_docs", "router_accuracy", "field_accuracy_overall",
                                          "doc_type_accuracy", "field_accuracy", "exceptions")}
-    out = {"source_log": str(log.relative_to(ROOT)) if log.is_relative_to(ROOT) else str(log),
+    out = {"split": rec["split"], "source_log": str(log.relative_to(ROOT)) if log.is_relative_to(ROOT) else str(log),
            "created": rec["timestamp"], "git": rec["git"], "model": rec["model"],
            "prompt_versions": rec["prompt_versions"], "metrics": m}
     path.write_text(json.dumps(out, indent=2, sort_keys=False) + "\n")
@@ -48,7 +49,7 @@ def save_baseline(log: Path, rec: dict, path: Path = BASELINE) -> None:
 
 def print_report(rec: dict) -> None:
     m = rec["metrics"]
-    print(f"\nEval  model={rec['model']}  prompts={rec['prompt_versions']}  "
+    print(f"\nEval  split={rec['split']}  model={rec['model']}  prompts={rec['prompt_versions']}  "
           f"commit={(rec['git']['commit'] or '?')[:8]}{' (dirty)' if rec['git']['dirty'] else ''}")
     print(f"  router accuracy      {m['router_accuracy']:.1%}  ({m['n_docs']} docs)")
     print(f"  field accuracy       {m['field_accuracy_overall']:.1%}  "
@@ -67,11 +68,12 @@ def main() -> None:
     add_pipeline_args(ap)
     ap.add_argument("--from-log", nargs="?", const="latest", metavar="PATH",
                     help="score an existing pipeline log instead of running the pipeline")
-    ap.add_argument("--save-baseline", action="store_true", help=f"write {BASELINE.relative_to(ROOT)}")
+    ap.add_argument("--save-baseline", action="store_true", help="write the split's baseline file "
+                    "(evals/baseline.json or evals/baseline_hard.json)")
     args = ap.parse_args()
 
     if args.from_log:
-        log = latest_run_log() if args.from_log == "latest" else Path(args.from_log).resolve()
+        log = latest_run_log(split=args.split) if args.from_log == "latest" else Path(args.from_log).resolve()
         if log is None:
             sys.exit("no runs/*_pipeline.jsonl")
         header, records, _ = load_log(log)
@@ -83,19 +85,26 @@ def main() -> None:
             prompts = resolve_prompts(args.prompt)
         except ValueError as e:
             ap.error(str(e))
-        log, header, records = run_pipeline(pdfs_from_args(args), get_client(), prompts, args.workers)
+        log, header, records = run_pipeline(pdfs_from_args(args), get_client(model=args.model), prompts,
+                                            args.workers, split=args.split)
         print_summary(log, header, records)
 
-    rec = append_eval(log, header, compute_metrics(records))
+    split = split_of(header)
+    baseline = BASELINES[split]
+    rec = append_eval(log, header, compute_metrics(records, split=split))
     print_report(rec)
     print(f"Eval record appended to {log.relative_to(ROOT) if log.is_relative_to(ROOT) else log}")
 
     if args.save_baseline:
-        save_baseline(log, rec)
-        print(f"Baseline written to {BASELINE.relative_to(ROOT)}")
-    elif BASELINE.exists():
-        problems = find_regressions(rec["metrics"], json.loads(BASELINE.read_text()))
-        print("Regression check vs baseline: " + ("OK" if not problems else "FAILED"))
+        save_baseline(log, rec, baseline)
+        print(f"Baseline written to {baseline.relative_to(ROOT)}")
+    elif baseline.exists():
+        base = json.loads(baseline.read_text())
+        if base.get("model", rec["model"]) != rec["model"]:
+            print(f"Regression check skipped: baseline is {base['model']}, this run is {rec['model']}")
+            return
+        problems = find_regressions(rec["metrics"], base)
+        print(f"Regression check vs {baseline.relative_to(ROOT)}: " + ("OK" if not problems else "FAILED"))
         for p in problems:
             print(f"  - {p}")
         if problems:

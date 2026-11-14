@@ -16,18 +16,32 @@ import json
 import sys
 from pathlib import Path
 
-from evals.scoring import compute_metrics, load_log
+from evals.scoring import compute_metrics, load_log, split_of
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "evals" / "baseline.json"
+BASELINES = {"main": BASELINE, "hard": ROOT / "evals" / "baseline_hard.json"}
 RUNS = ROOT / "runs"
 FIELD_DROP_POINTS = 5.0
 EPS = 1e-9
 
 
-def latest_run_log(runs_dir: Path = RUNS) -> Path | None:
-    logs = sorted(runs_dir.glob("*_pipeline.jsonl"))
-    return logs[-1] if logs else None
+def latest_run_log(runs_dir: Path = RUNS, split: str = "main", model: str | None = None) -> Path | None:
+    """Newest pipeline log for a split (and model, if given), read from each log's header line."""
+    for log in sorted(runs_dir.glob("*_pipeline.jsonl"), reverse=True):
+        with log.open() as fh:
+            header = json.loads(fh.readline())
+        if split_of(header) == split and model in (None, header.get("model")):
+            return log
+    return None
+
+
+def gate_log(split: str = "main") -> Path | None:
+    """The log the regression gate checks: newest run of this split by the baseline's model."""
+    base = BASELINES[split]
+    if not base.exists():
+        return None
+    return latest_run_log(split=split, model=load_baseline(base).get("model"))
 
 
 def load_baseline(path: Path = BASELINE) -> dict:
@@ -55,26 +69,30 @@ def find_regressions(current: dict, baseline: dict) -> list[str]:
     return problems
 
 
-def check_log(path: Path, baseline_path: Path = BASELINE) -> tuple[dict, list[str]]:
-    _, records, _ = load_log(path)
-    metrics = compute_metrics(records)
-    return metrics, find_regressions(metrics, load_baseline(baseline_path))
+def check_log(path: Path, baseline_path: Path | None = None) -> tuple[dict, list[str]]:
+    """Score a log against the baseline for its own split (from the log header)."""
+    header, records, _ = load_log(path)
+    split = split_of(header)
+    metrics = compute_metrics(records, split=split)
+    return metrics, find_regressions(metrics, load_baseline(baseline_path or BASELINES[split]))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--log", help="pipeline log (default: newest runs/*_pipeline.jsonl)")
+    ap.add_argument("--log", help="pipeline log (default: newest run log for --split)")
+    ap.add_argument("--split", default="main", choices=sorted(BASELINES))
     args = ap.parse_args()
-    path = Path(args.log).resolve() if args.log else latest_run_log()
+    path = Path(args.log).resolve() if args.log else gate_log(args.split)
     if path is None:
-        sys.exit("no runs/*_pipeline.jsonl to check")
+        sys.exit(f"no {args.split}-split runs/*_pipeline.jsonl to check")
+    base = BASELINES[split_of(load_log(path)[0])]
     _, problems = check_log(path)
     if problems:
-        print(f"REGRESSION in {path.name} vs {BASELINE.relative_to(ROOT)}:")
+        print(f"REGRESSION in {path.name} vs {base.relative_to(ROOT)}:")
         for p in problems:
             print(f"  - {p}")
         sys.exit(1)
-    print(f"OK: {path.name} has no regressions vs {BASELINE.relative_to(ROOT)}")
+    print(f"OK: {path.name} has no regressions vs {base.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

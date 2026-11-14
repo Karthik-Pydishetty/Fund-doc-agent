@@ -82,6 +82,8 @@ main.py               runs the full pipeline
 - Exception precision/recall vs ground truth (offline): `python -m evals.exceptions`
 - Full eval (API): `python -m evals.run_eval` (`--prompt cas=v2` to try a prompt file without code changes; `--from-log` to score an existing log; `--save-baseline` to reset evals/baseline.json)
 - Regression gate (offline, part of `pytest`): `tests/test_regression.py` vs `evals/baseline.json`; `EVAL_LOG=path pytest tests/test_regression.py` to check a specific log
+- Hard split: `python -m generator.hard` (writes data/hard/ only); `python -m evals.run_eval --split hard [--model claude-haiku-5-5]`; regression gate checks each split vs its own baseline (`evals/baseline.json`, `evals/baseline_hard.json`) using the newest run by the baseline's model
+- Model comparison (offline): `python -m evals.compare_models --split hard` (or pass two run logs)
 
 ## Current phase
 Phase 7

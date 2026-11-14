@@ -18,7 +18,8 @@ from pathlib import Path
 from validation.validate import EXCEPTION, validate_records
 
 ROOT = Path(__file__).resolve().parents[1]
-GROUND_TRUTH = ROOT / "data" / "ground_truth.json"
+SPLITS = {"main": ROOT / "data", "hard": ROOT / "data" / "hard"}
+GROUND_TRUTH = SPLITS["main"] / "ground_truth.json"
 TYPES = ["CAS", "SOI", "LETTER", "UNKNOWN"]
 LIST_KEYS = {"holdings": "name", "top_holdings": "name", "top_sector_exposures": "sector"}
 UNSCORED = {"confidence", "commentary_summary"}
@@ -26,8 +27,15 @@ MONEY_TOL, PCT_TOL = 0.5, 0.05
 PCT_HINTS = ("pct", "exposure", "return")
 
 
-def load_truth() -> list[dict]:
-    return json.loads(GROUND_TRUTH.read_text())["documents"]
+def load_truth(split: str = "main") -> list[dict]:
+    if split not in SPLITS:
+        raise ValueError(f"unknown split {split!r}; known: {sorted(SPLITS)}")
+    return json.loads((SPLITS[split] / "ground_truth.json").read_text())["documents"]
+
+
+def split_of(header: dict) -> str:
+    """Logs written before splits existed are main-split runs."""
+    return header.get("split", "main")
 
 
 def load_log(path: Path) -> tuple[dict, list[dict], list[dict]]:
@@ -113,9 +121,9 @@ def exception_scores(results, truth_docs) -> dict:
     }
 
 
-def compute_metrics(records: list[dict], truth: list[dict] | None = None) -> dict:
+def compute_metrics(records: list[dict], truth: list[dict] | None = None, split: str = "main") -> dict:
     """All eval metrics for one run. Re-validates records, so older logs score the same way."""
-    truth = truth if truth is not None else load_truth()
+    truth = truth if truth is not None else load_truth(split)
     by_file = {r["file"]: r for r in records}
     docs = [d for d in truth if d["file"] in by_file]
 

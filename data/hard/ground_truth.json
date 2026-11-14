@@ -1,0 +1,678 @@
+{
+  "generator_version": "hard-1.0",
+  "seed": 42,
+  "split": "hard",
+  "conventions": "same as data/ground_truth.json (see CLAUDE.md)",
+  "documents": [
+    {
+      "doc_id": "hard_001",
+      "file": "hard_001.pdf",
+      "doc_type": "CAS",
+      "layout": "cas_combined_fees",
+      "challenge": "management and incentive fees on one line, split only in Note 2",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Granite Peak Capital Partners III, L.P.",
+        "manager": "Granite Peak Advisors LLC",
+        "investor_name": "Redfern Municipal Employees' Pension Plan",
+        "period_start": "2025-07-01",
+        "period_end": "2025-09-30",
+        "currency": "USD",
+        "beginning_nav": 17704536,
+        "contributions": 1662626,
+        "distributions": 1405825,
+        "management_fees": 209799,
+        "incentive_fees": 397446,
+        "net_gain_loss": 1989455,
+        "ending_nav": 19343547,
+        "total_commitment": 47250000,
+        "unfunded_commitment": 29065783
+      }
+    },
+    {
+      "doc_id": "hard_002",
+      "file": "hard_002.pdf",
+      "doc_type": "CAS",
+      "layout": "cas_footer_units",
+      "challenge": "units ('in $000s') appear only in a footer note",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Granite Peak Capital Partners III, L.P.",
+        "manager": "Granite Peak Advisors LLC",
+        "investor_name": "Northgate University Endowment",
+        "period_start": "2025-07-01",
+        "period_end": "2025-09-30",
+        "currency": "USD",
+        "beginning_nav": 6592000,
+        "contributions": 298000,
+        "distributions": 607000,
+        "management_fees": 51000,
+        "incentive_fees": 0,
+        "net_gain_loss": -226000,
+        "ending_nav": 6006000,
+        "total_commitment": 13000000,
+        "unfunded_commitment": 5933000
+      }
+    },
+    {
+      "doc_id": "hard_003",
+      "file": "hard_003.pdf",
+      "doc_type": "UNKNOWN",
+      "layout": "k1_cover",
+      "challenge": "Schedule K-1 cover letter; not a CAS despite capital account wording",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {}
+    },
+    {
+      "doc_id": "hard_004",
+      "file": "hard_004.pdf",
+      "doc_type": "CAS",
+      "layout": "cas_ocr",
+      "challenge": "OCR text layer: letter O for zero, stray spaces inside numbers",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Bluewater Infrastructure Fund II, L.P.",
+        "manager": "Bluewater Capital Management LP",
+        "investor_name": "Pellworth Insurance Company",
+        "period_start": "2025-07-01",
+        "period_end": "2025-09-30",
+        "currency": "USD",
+        "beginning_nav": 17663095,
+        "contributions": 0,
+        "distributions": 1466313,
+        "management_fees": 89441,
+        "incentive_fees": 171486,
+        "net_gain_loss": 1240854,
+        "ending_nav": 17176709,
+        "total_commitment": 20500000,
+        "unfunded_commitment": 4898683
+      }
+    },
+    {
+      "doc_id": "hard_005",
+      "file": "hard_005.pdf",
+      "doc_type": "LETTER",
+      "layout": "letter_paren_shorts",
+      "challenge": "short exposure and a net-short sector printed in parentheses",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Ironbark Global Opportunities Fund, L.P.",
+        "quarter": "Q3 2025",
+        "long_exposure": 104.9,
+        "short_exposure": 77.9,
+        "gross_exposure": 182.8,
+        "net_exposure": 27.0,
+        "top_sector_exposures": [
+          {
+            "sector": "Materials",
+            "exposure_pct": 21.6
+          },
+          {
+            "sector": "Financials",
+            "exposure_pct": 12.2
+          },
+          {
+            "sector": "Health Care",
+            "exposure_pct": -10.2
+          },
+          {
+            "sector": "Consumer Discretionary",
+            "exposure_pct": -11.9
+          }
+        ],
+        "top_holdings": [
+          {
+            "name": "Tidewater Labs Group",
+            "pct_of_nav": 7.5
+          },
+          {
+            "name": "Wexford Energy Inc.",
+            "pct_of_nav": 5.8
+          },
+          {
+            "name": "Orchard Systems plc",
+            "pct_of_nav": 5.8
+          },
+          {
+            "name": "Northwind Systems AG",
+            "pct_of_nav": 4.1
+          },
+          {
+            "name": "Alder Networks Inc.",
+            "pct_of_nav": 3.0
+          }
+        ],
+        "quarterly_return": 5.8,
+        "commentary_summary": "The fund returned 5.8% in Q3 2025, driven by Materials longs and partially offset by Health Care shorts; outlook neutral."
+      }
+    },
+    {
+      "doc_id": "hard_006",
+      "file": "hard_006.pdf",
+      "doc_type": "SOI",
+      "layout": "soi_pct_broken",
+      "challenge": "one holding's % of NAV misprinted; weights don't sum to 100",
+      "number_format": null,
+      "expected_exception": true,
+      "exception_reasons": [
+        "SOI holdings pct_of_nav do not sum to ~100"
+      ],
+      "fields": {
+        "fund_name": "Bluewater Infrastructure Fund II, L.P.",
+        "as_of_date": "2025-09-30",
+        "holdings": [
+          {
+            "name": "Orchard Brands plc",
+            "sector": "Financials",
+            "geography": "Nordics",
+            "cost": 23381600,
+            "fair_value": 30486783,
+            "pct_of_nav": 16.2
+          },
+          {
+            "name": "Yarrow Energy Corp.",
+            "sector": "Financials",
+            "geography": "France",
+            "cost": 34837555,
+            "fair_value": 62846139,
+            "pct_of_nav": 33.4
+          },
+          {
+            "name": "Alder Networks Group",
+            "sector": "Materials",
+            "geography": "India",
+            "cost": 8794555,
+            "fair_value": 10365600,
+            "pct_of_nav": 5.5
+          },
+          {
+            "name": "Larkspur Foods Holdings",
+            "sector": "Information Technology",
+            "geography": "India",
+            "cost": 34997517,
+            "fair_value": 22328650,
+            "pct_of_nav": 19.8
+          },
+          {
+            "name": "Foxglove Energy GmbH",
+            "sector": "Information Technology",
+            "geography": "Japan",
+            "cost": 33320163,
+            "fair_value": 21400142,
+            "pct_of_nav": 11.4
+          },
+          {
+            "name": "Brightwell Health Group",
+            "sector": "Information Technology",
+            "geography": "Netherlands",
+            "cost": 23839555,
+            "fair_value": 20324464,
+            "pct_of_nav": 10.8
+          },
+          {
+            "name": "Juniper Materials plc",
+            "sector": "Materials",
+            "geography": "Japan",
+            "cost": 14617180,
+            "fair_value": 12094932,
+            "pct_of_nav": 6.4
+          },
+          {
+            "name": "Tidewater Foods S.A.",
+            "sector": "Materials",
+            "geography": "Japan",
+            "cost": 4931812,
+            "fair_value": 8235800,
+            "pct_of_nav": 4.4
+          }
+        ],
+        "total_fair_value": 188082510
+      }
+    },
+    {
+      "doc_id": "hard_007",
+      "file": "hard_007.pdf",
+      "doc_type": "CAS",
+      "layout": "cas_q3_9m",
+      "challenge": "'Q3 2025' and '9M 2025' columns with no QTD/YTD wording; extract Q3",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Granite Peak Capital Partners III, L.P.",
+        "manager": "Granite Peak Advisors LLC",
+        "investor_name": "Halvorsen Family Trust",
+        "period_start": "2025-07-01",
+        "period_end": "2025-09-30",
+        "currency": "USD",
+        "beginning_nav": 23887102,
+        "contributions": 2433558,
+        "distributions": 0,
+        "management_fees": 189270,
+        "incentive_fees": 0,
+        "net_gain_loss": 1183581,
+        "ending_nav": 27314971,
+        "total_commitment": 40250000,
+        "unfunded_commitment": 19976075
+      }
+    },
+    {
+      "doc_id": "hard_008",
+      "file": "hard_008.pdf",
+      "doc_type": "SOI",
+      "layout": "soi_two_page",
+      "challenge": "38 holdings over two pages, header repeated, total on page 2",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Granite Peak Capital Partners III, L.P.",
+        "as_of_date": "2025-09-30",
+        "holdings": [
+          {
+            "name": "Verity Systems plc",
+            "sector": "Industrials",
+            "geography": "Netherlands",
+            "cost": 27286246,
+            "fair_value": 25878789,
+            "pct_of_nav": 4.01
+          },
+          {
+            "name": "Nimbus Brands LLC",
+            "sector": "Utilities",
+            "geography": "United States",
+            "cost": 23599583,
+            "fair_value": 33981101,
+            "pct_of_nav": 5.26
+          },
+          {
+            "name": "Yarrow Energy Holdings",
+            "sector": "Real Estate",
+            "geography": "Nordics",
+            "cost": 29290740,
+            "fair_value": 52952763,
+            "pct_of_nav": 8.2
+          },
+          {
+            "name": "Foxglove Health Ltd.",
+            "sector": "Utilities",
+            "geography": "Germany",
+            "cost": 23511069,
+            "fair_value": 28070000,
+            "pct_of_nav": 4.35
+          },
+          {
+            "name": "Halcyon Robotics Ltd.",
+            "sector": "Consumer Staples",
+            "geography": "Netherlands",
+            "cost": 15960227,
+            "fair_value": 28365995,
+            "pct_of_nav": 4.39
+          },
+          {
+            "name": "Cobalt Energy S.A.",
+            "sector": "Consumer Staples",
+            "geography": "India",
+            "cost": 5716796,
+            "fair_value": 6536951,
+            "pct_of_nav": 1.01
+          },
+          {
+            "name": "Alder Brands Corp.",
+            "sector": "Industrials",
+            "geography": "United States",
+            "cost": 12870238,
+            "fair_value": 16780618,
+            "pct_of_nav": 2.6
+          },
+          {
+            "name": "Halcyon Analytics Ltd.",
+            "sector": "Consumer Staples",
+            "geography": "France",
+            "cost": 4463961,
+            "fair_value": 7363462,
+            "pct_of_nav": 1.14
+          },
+          {
+            "name": "Brightwell Materials Corp.",
+            "sector": "Consumer Discretionary",
+            "geography": "Canada",
+            "cost": 5427760,
+            "fair_value": 6527754,
+            "pct_of_nav": 1.01
+          },
+          {
+            "name": "Nimbus Labs S.A.",
+            "sector": "Real Estate",
+            "geography": "Australia",
+            "cost": 4958312,
+            "fair_value": 7656924,
+            "pct_of_nav": 1.19
+          },
+          {
+            "name": "Brightwell Materials Holdings",
+            "sector": "Industrials",
+            "geography": "Canada",
+            "cost": 23860940,
+            "fair_value": 26957137,
+            "pct_of_nav": 4.18
+          },
+          {
+            "name": "Wexford Robotics Ltd.",
+            "sector": "Consumer Discretionary",
+            "geography": "Germany",
+            "cost": 11813658,
+            "fair_value": 13112043,
+            "pct_of_nav": 2.03
+          },
+          {
+            "name": "Pinecrest Robotics Holdings",
+            "sector": "Industrials",
+            "geography": "India",
+            "cost": 6899867,
+            "fair_value": 4169607,
+            "pct_of_nav": 0.65
+          },
+          {
+            "name": "Emberline Robotics AG",
+            "sector": "Consumer Staples",
+            "geography": "Japan",
+            "cost": 19078054,
+            "fair_value": 29400594,
+            "pct_of_nav": 4.56
+          },
+          {
+            "name": "Juniper Energy Inc.",
+            "sector": "Consumer Staples",
+            "geography": "United States",
+            "cost": 6573603,
+            "fair_value": 10808242,
+            "pct_of_nav": 1.67
+          },
+          {
+            "name": "Verity Software plc",
+            "sector": "Consumer Staples",
+            "geography": "India",
+            "cost": 3867604,
+            "fair_value": 4231632,
+            "pct_of_nav": 0.66
+          },
+          {
+            "name": "Moraine Networks Ltd.",
+            "sector": "Utilities",
+            "geography": "Germany",
+            "cost": 26819793,
+            "fair_value": 18661819,
+            "pct_of_nav": 2.89
+          },
+          {
+            "name": "Rookwood Logistics Group",
+            "sector": "Consumer Staples",
+            "geography": "Germany",
+            "cost": 8477860,
+            "fair_value": 9420369,
+            "pct_of_nav": 1.46
+          },
+          {
+            "name": "Saltmarsh Analytics Corp.",
+            "sector": "Utilities",
+            "geography": "United Kingdom",
+            "cost": 1593295,
+            "fair_value": 1477155,
+            "pct_of_nav": 0.23
+          },
+          {
+            "name": "Nimbus Foods Ltd.",
+            "sector": "Consumer Staples",
+            "geography": "Germany",
+            "cost": 11154073,
+            "fair_value": 8325369,
+            "pct_of_nav": 1.29
+          },
+          {
+            "name": "Moraine Foods plc",
+            "sector": "Utilities",
+            "geography": "France",
+            "cost": 22053059,
+            "fair_value": 37192575,
+            "pct_of_nav": 5.76
+          },
+          {
+            "name": "Rookwood Diagnostics Holdings",
+            "sector": "Consumer Staples",
+            "geography": "Germany",
+            "cost": 19371703,
+            "fair_value": 14506487,
+            "pct_of_nav": 2.25
+          },
+          {
+            "name": "Cobalt Software Inc.",
+            "sector": "Consumer Staples",
+            "geography": "Netherlands",
+            "cost": 23916318,
+            "fair_value": 14383602,
+            "pct_of_nav": 2.23
+          },
+          {
+            "name": "Yarrow Diagnostics Corp.",
+            "sector": "Communication Services",
+            "geography": "Canada",
+            "cost": 4908743,
+            "fair_value": 8790047,
+            "pct_of_nav": 1.36
+          },
+          {
+            "name": "Nimbus Brands Group",
+            "sector": "Utilities",
+            "geography": "Australia",
+            "cost": 29750229,
+            "fair_value": 23930612,
+            "pct_of_nav": 3.71
+          },
+          {
+            "name": "Yarrow Analytics Corp.",
+            "sector": "Consumer Discretionary",
+            "geography": "Canada",
+            "cost": 27716477,
+            "fair_value": 27350125,
+            "pct_of_nav": 4.24
+          },
+          {
+            "name": "Verity Materials plc",
+            "sector": "Communication Services",
+            "geography": "Germany",
+            "cost": 18300702,
+            "fair_value": 33994417,
+            "pct_of_nav": 5.27
+          },
+          {
+            "name": "Nimbus Software Ltd.",
+            "sector": "Utilities",
+            "geography": "Australia",
+            "cost": 14015119,
+            "fair_value": 15387465,
+            "pct_of_nav": 2.38
+          },
+          {
+            "name": "Driftwood Industries GmbH",
+            "sector": "Consumer Discretionary",
+            "geography": "Japan",
+            "cost": 7130251,
+            "fair_value": 10948326,
+            "pct_of_nav": 1.7
+          },
+          {
+            "name": "Halcyon Energy AG",
+            "sector": "Utilities",
+            "geography": "Nordics",
+            "cost": 9406138,
+            "fair_value": 11920106,
+            "pct_of_nav": 1.85
+          },
+          {
+            "name": "Emberline Analytics AG",
+            "sector": "Consumer Staples",
+            "geography": "Australia",
+            "cost": 9497151,
+            "fair_value": 14575081,
+            "pct_of_nav": 2.26
+          },
+          {
+            "name": "Brightwell Systems Group",
+            "sector": "Communication Services",
+            "geography": "Netherlands",
+            "cost": 1629777,
+            "fair_value": 1534014,
+            "pct_of_nav": 0.24
+          },
+          {
+            "name": "Larkspur Robotics S.A.",
+            "sector": "Consumer Staples",
+            "geography": "France",
+            "cost": 1842591,
+            "fair_value": 2547692,
+            "pct_of_nav": 0.39
+          },
+          {
+            "name": "Northwind Analytics Holdings",
+            "sector": "Real Estate",
+            "geography": "Netherlands",
+            "cost": 4658615,
+            "fair_value": 7540953,
+            "pct_of_nav": 1.17
+          },
+          {
+            "name": "Alder Industries Inc.",
+            "sector": "Utilities",
+            "geography": "United Kingdom",
+            "cost": 24553626,
+            "fair_value": 24986693,
+            "pct_of_nav": 3.87
+          },
+          {
+            "name": "Nimbus Foods Corp.",
+            "sector": "Utilities",
+            "geography": "France",
+            "cost": 18464672,
+            "fair_value": 26972047,
+            "pct_of_nav": 4.18
+          },
+          {
+            "name": "Cobalt Brands AG",
+            "sector": "Consumer Discretionary",
+            "geography": "Netherlands",
+            "cost": 13576962,
+            "fair_value": 20043365,
+            "pct_of_nav": 3.11
+          },
+          {
+            "name": "Moraine Foods Inc.",
+            "sector": "Utilities",
+            "geography": "Netherlands",
+            "cost": 5403899,
+            "fair_value": 8152517,
+            "pct_of_nav": 1.26
+          }
+        ],
+        "total_fair_value": 645434448
+      }
+    },
+    {
+      "doc_id": "hard_009",
+      "file": "hard_009.pdf",
+      "doc_type": "CAS",
+      "layout": "cas_two_column",
+      "challenge": "two-column page layout; extracted text interleaves the columns",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Bluewater Infrastructure Fund II, L.P.",
+        "manager": "Bluewater Capital Management LP",
+        "investor_name": "Pellworth Insurance Company",
+        "period_start": "2025-07-01",
+        "period_end": "2025-09-30",
+        "currency": "USD",
+        "beginning_nav": 21614190,
+        "contributions": 0,
+        "distributions": 2530226,
+        "management_fees": 149761,
+        "incentive_fees": 0,
+        "net_gain_loss": -881990,
+        "ending_nav": 18052213,
+        "total_commitment": 37500000,
+        "unfunded_commitment": 13190732
+      }
+    },
+    {
+      "doc_id": "hard_010",
+      "file": "hard_010.pdf",
+      "doc_type": "LETTER",
+      "layout": "letter_pct_of_gross",
+      "challenge": "long exposure given only as % of gross; long/short/net must be computed",
+      "number_format": null,
+      "expected_exception": false,
+      "exception_reasons": [],
+      "fields": {
+        "fund_name": "Ironbark Global Opportunities Fund, L.P.",
+        "quarter": "Q3 2025",
+        "long_exposure": 120.9,
+        "short_exposure": 34.1,
+        "gross_exposure": 155.0,
+        "net_exposure": 86.8,
+        "top_sector_exposures": [
+          {
+            "sector": "Materials",
+            "exposure_pct": 24.4
+          },
+          {
+            "sector": "Health Care",
+            "exposure_pct": 14.4
+          },
+          {
+            "sector": "Real Estate",
+            "exposure_pct": 4.9
+          },
+          {
+            "sector": "Information Technology",
+            "exposure_pct": 2.5
+          }
+        ],
+        "top_holdings": [
+          {
+            "name": "Saltmarsh Robotics Holdings",
+            "pct_of_nav": 6.6
+          },
+          {
+            "name": "Driftwood Diagnostics GmbH",
+            "pct_of_nav": 6.5
+          },
+          {
+            "name": "Verity Analytics GmbH",
+            "pct_of_nav": 5.8
+          },
+          {
+            "name": "Tidewater Robotics Holdings",
+            "pct_of_nav": 4.5
+          },
+          {
+            "name": "Alder Logistics Group",
+            "pct_of_nav": 3.9
+          }
+        ],
+        "quarterly_return": 2.0,
+        "commentary_summary": "The fund returned 2.0% in Q3 2025, driven by Materials longs and partially offset by Information Technology shorts; outlook constructive."
+      }
+    }
+  ]
+}

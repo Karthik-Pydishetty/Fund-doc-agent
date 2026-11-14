@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from evals.scoring import exception_scores as score, load_log, load_truth  # `score` kept for callers
+from evals.scoring import exception_scores as score, load_log, load_truth, split_of  # `score` kept for callers
 from validation.run import latest_pipeline_log
 from validation.validate import EXCEPTION, validate_records
 
@@ -22,9 +22,9 @@ def main() -> None:
     ap.add_argument("--log")
     args = ap.parse_args()
     path = Path(args.log).resolve() if args.log else latest_pipeline_log()
-    _, recs, _ = load_log(path)
+    header, recs, _ = load_log(path)
     results = validate_records(recs)
-    truth = load_truth()
+    truth = load_truth(split_of(header))
     tmap = {d["doc_id"]: d for d in truth}
     s = score(results, truth)
 
