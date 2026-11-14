@@ -71,6 +71,8 @@ main.py               runs the full pipeline
 - Generate data: `python -m generator.generate`
 - Run pipeline: `python main.py`
 - Tests: `pytest`
+- Score latest pipeline run (offline): `python -m evals.compare` (`--doc doc_007` for one doc)
+- CAS side-by-side: `python -m evals.compare_cas` (`--from-log` to rebuild offline)
 
 ## Current phase
-Phase 3
+Phase 4
