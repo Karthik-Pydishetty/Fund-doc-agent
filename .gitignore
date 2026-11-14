@@ -1,0 +1,13 @@
+# Secrets
+.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Outputs
+exceptions_report.csv
+.DS_Store
