@@ -73,4 +73,4 @@ main.py               runs the full pipeline
 - Tests: `pytest`
 
 ## Current phase
-Phase 2
+Phase 3
