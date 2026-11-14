@@ -49,6 +49,23 @@ main.py               runs the full pipeline
 - CAS: fund_name, manager, investor_name, period_start, period_end, currency, beginning_nav, contributions, distributions, management_fees, incentive_fees, net_gain_loss, ending_nav, total_commitment, unfunded_commitment, confidence
 - SOI: fund_name, as_of_date, holdings[] (name, sector, geography, cost, fair_value, pct_of_nav), total_fair_value, confidence
 - LETTER: fund_name, quarter, long_exposure, short_exposure, gross_exposure, net_exposure, top_sector_exposures[], top_holdings[], quarterly_return, commentary_summary, confidence
+  - top_sector_exposures[]: {sector, exposure_pct}; top_holdings[]: {name, pct_of_nav}
+
+## Ground-truth conventions (extractor schemas MUST use the same units)
+- **Percent units, never fractions.** Every percentage is stored as the number printed before the `%`: a -0.5% return is `-0.5` (not `-0.005`), 119.2% long exposure is `119.2`, a 1.0% holding weight is `1.0`. Applies to quarterly_return, long/short/gross/net_exposure, exposure_pct, pct_of_nav. Prompts and pydantic field descriptions must say so explicitly.
+- **Money in absolute units** of the document currency: "£0.18mm" -> `180000`, "€15.09 million" -> `15090000`, "36,957" in a table headed "(in thousands)" -> `36957000`.
+- **CAS signs:** contributions, distributions, management_fees, incentive_fees are positive magnitudes even when printed as `(12,500)` or "Less: ..."; net_gain_loss is signed ("net loss of €0.78 million" -> `-780000`).
+- **Dates** ISO `YYYY-MM-DD`; **quarter** `Q<n> <YYYY>` ("third quarter of 2025", "3Q25", "quarter ended September 30, 2025" -> `Q3 2025`).
+- **Broken docs record the values as printed**, not corrected ones. E.g. doc_021 prints ending NAV €14.14 million although its roll-forward gives €13.77 million; ground truth is `14140000`. The extractor is graded on reading the page accurately and must never "fix" figures; catching the inconsistency is the validator's job (Phase 4), scored as exception precision/recall (Phase 5).
+- **Rounded percentages:** pct_of_nav is printed rounded (1-2 dp), so clean SOIs sum to ~100, not exactly 100. Measured on the current data: clean docs deviate at most ±0.10 (range 99.90-100.10). The Phase 4 tolerance is **±0.5**; `tests/test_generator.py` asserts every clean SOI stays inside it. Fair values have no rounding: sum(fair_value) == total_fair_value exactly on clean docs.
+
+## Eval notes (Phase 5)
+- `commentary_summary` is free text; two good summaries can share no wording. Exclude it from field-level accuracy (report it separately at most).
+- `data/` (PDFs + ground_truth.json) is committed and frozen as the test set. If the generator changes, regenerating `data/` is a deliberate, separately committed change; re-baseline evals after it.
+
+## Model config
+- One config value: `MODEL` in `config.py` (default `claude-sonnet-5-5`, override with `FUND_AGENT_MODEL` env var). Nothing else names a model.
+- Sonnet 5.5 rejects forced `tool_choice` (`any`/`tool`) with a 400. For structured output use `tool_choice: auto` + `strict: true` on the tool, or structured outputs (`output_config.format`).
 
 ## Commands
 - Generate data: `python -m generator.generate`
