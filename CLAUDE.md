@@ -79,4 +79,4 @@ main.py               runs the full pipeline
 - Regression gate (offline, part of `pytest`): `tests/test_regression.py` vs `evals/baseline.json`; `EVAL_LOG=path pytest tests/test_regression.py` to check a specific log
 
 ## Current phase
-Phase 6
+Phase 7 (stretch, only if asked)

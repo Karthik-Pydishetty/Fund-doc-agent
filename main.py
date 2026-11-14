@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -29,8 +30,10 @@ REPORT = ROOT / "exceptions_report.csv"
 def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], workers: int = 5,
                  runs_dir: Path = RUNS, report: Path = REPORT) -> tuple[Path, dict, list[dict]]:
     started = dt.datetime.now(dt.timezone.utc)
+    t0 = time.perf_counter()
     with ThreadPoolExecutor(workers) as pool:
         records = list(pool.map(lambda p: process(p, client, prompts), pdfs))
+    wall_s = round(time.perf_counter() - t0, 2)
 
     results = {v.file: v for v in validate_records(records)}
     for r in records:
@@ -41,7 +44,7 @@ def run_pipeline(pdfs: list[Path], client: LLMClient, prompts: dict[str, str], w
     calls = [c for r in records for c in r["calls"].values()]
     header = {
         "timestamp": started.isoformat(), "kind": "pipeline", "provider": client.provider, "model": client.model,
-        "prompt_versions": prompts, "n_docs": len(records),
+        "prompt_versions": prompts, "n_docs": len(records), "workers": workers, "wall_s": wall_s,
         "routes": dict(Counter(r["route"]["doc_type"] if r["route"] else "ERROR" for r in records)),
         "n_errors": sum(bool(r["error"]) for r in records),
         "n_exceptions": sum(v.status == EXCEPTION for v in results.values()),
