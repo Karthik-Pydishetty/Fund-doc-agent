@@ -96,3 +96,46 @@ def test_scorer_fails_every_field_when_misrouted():
 def test_commentary_summary_not_scored():
     d = BY_TYPE["LETTER"]
     assert not any("commentary" in k for k, *_ in compare.score_doc(d, _rec(d, d["fields"])))
+
+
+# --------------------------------------------------------------------------- prompt version overrides
+
+@pytest.fixture
+def prompts_dir(tmp_path, monkeypatch):
+    """Copy of agents/prompts plus a cas_v2, so overrides can be tested without adding files to the repo."""
+    import shutil
+
+    from agents.extractors import base
+
+    d = tmp_path / "prompts"
+    shutil.copytree(base.PROMPTS_DIR, d)
+    (d / "cas_v2.md").write_text("CAS PROMPT V2")
+    monkeypatch.setattr(base, "PROMPTS_DIR", d)
+    monkeypatch.setattr(pipeline, "PROMPTS_DIR", d)
+    return d
+
+
+def test_resolve_prompts_defaults_and_overrides(prompts_dir):
+    assert pipeline.resolve_prompts() == pipeline.prompt_versions()
+    p = pipeline.resolve_prompts(["cas=v2"])
+    assert p["cas"] == "cas_v2" and p["router"] == "router_v1" and p["soi"] == "soi_v1"
+    assert pipeline.resolve_prompts(["CAS=cas_v2"])["cas"] == "cas_v2"
+    assert pipeline.resolve_prompts({"cas": "v2"})["cas"] == "cas_v2"
+
+
+@pytest.mark.parametrize("bad,msg", [
+    (["cas=v9"], "no prompt file agents/prompts/cas_v9.md; available for cas: ['cas_v1', 'cas_v2']"),
+    (["foo=v2"], "bad prompt override foo='v2'"),
+    (["cas"], "bad prompt override cas=None"),
+])
+def test_resolve_prompts_rejects_bad_overrides(prompts_dir, bad, msg):
+    with pytest.raises(ValueError, match=msg.replace("[", r"\[").replace("]", r"\]")):
+        pipeline.resolve_prompts(bad)
+
+
+def test_override_reaches_the_extractor_without_code_changes(prompts_dir):
+    d = BY_TYPE["CAS"]
+    client = ScriptedClient("CAS", d["fields"])
+    pipeline.process(ROOT / "data" / d["file"], client, pipeline.resolve_prompts(["cas=v2"]))
+    assert client.prompts[0] == (prompts_dir / "router_v1.md").read_text()
+    assert client.prompts[1] == "CAS PROMPT V2"

@@ -8,5 +8,5 @@ from schemas.router import RouteDecision
 PROMPT_VERSION = "router_v1"
 
 
-def route_text(text: str, client: LLMClient) -> RouteDecision:
-    return client.extract(load_prompt(PROMPT_VERSION), text, RouteDecision)
+def route_text(text: str, client: LLMClient, prompt_version: str = PROMPT_VERSION) -> RouteDecision:
+    return client.extract(load_prompt(prompt_version), text, RouteDecision)

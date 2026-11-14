@@ -75,6 +75,8 @@ main.py               runs the full pipeline
 - CAS side-by-side: `python -m evals.compare_cas` (`--from-log` to rebuild offline)
 - Validate latest pipeline log (offline) -> exceptions_report.csv: `python -m validation.run`
 - Exception precision/recall vs ground truth (offline): `python -m evals.exceptions`
+- Full eval (API): `python -m evals.run_eval` (`--prompt cas=v2` to try a prompt file without code changes; `--from-log` to score an existing log; `--save-baseline` to reset evals/baseline.json)
+- Regression gate (offline, part of `pytest`): `tests/test_regression.py` vs `evals/baseline.json`; `EVAL_LOG=path pytest tests/test_regression.py` to check a specific log
 
 ## Current phase
-Phase 5
+Phase 6

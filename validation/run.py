@@ -22,8 +22,8 @@ def latest_pipeline_log() -> Path:
 
 
 def load_records(path: Path) -> tuple[dict, list[dict]]:
-    header, *recs = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
-    return header, recs
+    header, *rest = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
+    return header, [r for r in rest if "file" in r]  # skip appended eval records
 
 
 def main() -> None:

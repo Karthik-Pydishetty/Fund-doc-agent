@@ -5,34 +5,16 @@
 Primary metric: precision/recall of EXCEPTION vs expected_exception over docs whose true type is
 CAS/SOI/LETTER (the intentionally broken docs). UNKNOWN docs are scored separately: they should all
 land in exceptions with reason unknown_doc_type, but they are not "broken data", so counting them in
-the primary metric would blur what the finance rules catch.
+the primary metric would blur what the finance rules catch. Definitions live in evals/scoring.py.
 """
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
-from validation.run import latest_pipeline_log, load_records
+from evals.scoring import exception_scores as score, load_log, load_truth  # `score` kept for callers
+from validation.run import latest_pipeline_log
 from validation.validate import EXCEPTION, validate_records
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def score(results, truth_docs) -> dict:
-    by_id = {r.doc_id: r for r in results}
-    known = [d for d in truth_docs if d["doc_type"] != "UNKNOWN" and d["doc_id"] in by_id]
-    tp = [d["doc_id"] for d in known if d["expected_exception"] and by_id[d["doc_id"]].status == EXCEPTION]
-    fp = [d["doc_id"] for d in known if not d["expected_exception"] and by_id[d["doc_id"]].status == EXCEPTION]
-    fn = [d["doc_id"] for d in known if d["expected_exception"] and by_id[d["doc_id"]].status != EXCEPTION]
-    unknown = [d["doc_id"] for d in truth_docs if d["doc_type"] == "UNKNOWN" and d["doc_id"] in by_id]
-    unknown_flagged = [i for i in unknown if any(x.rule == "unknown_doc_type" for x in by_id[i].issues)]
-    return {
-        "tp": tp, "fp": fp, "fn": fn,
-        "precision": len(tp) / (len(tp) + len(fp)) if tp or fp else 1.0,
-        "recall": len(tp) / (len(tp) + len(fn)) if tp or fn else 1.0,
-        "unknown": unknown, "unknown_flagged": unknown_flagged,
-    }
 
 
 def main() -> None:
@@ -40,9 +22,9 @@ def main() -> None:
     ap.add_argument("--log")
     args = ap.parse_args()
     path = Path(args.log).resolve() if args.log else latest_pipeline_log()
-    _, recs = load_records(path)
+    _, recs, _ = load_log(path)
     results = validate_records(recs)
-    truth = json.loads((ROOT / "data/ground_truth.json").read_text())["documents"]
+    truth = load_truth()
     tmap = {d["doc_id"]: d for d in truth}
     s = score(results, truth)
 
