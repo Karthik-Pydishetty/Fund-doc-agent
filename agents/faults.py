@@ -21,7 +21,7 @@ import random
 import re
 
 from agents.self_correct import flatten, set_path
-from validation.rules import RULES
+from validation.rules import ARITHMETIC_RULES
 from validation.validate import SCHEMAS, validate_record
 
 NUMERIC_KINDS = ("dropped_digit", "sign_flip", "scale_10x")
@@ -87,7 +87,7 @@ def corrupt_quarter(q: str) -> str | None:
 
 def breaks_rule(doc_type: str, fields: dict) -> list[str]:
     f = SCHEMAS[doc_type].model_validate(fields).model_dump()
-    return [i.rule for rule in RULES[doc_type] if (i := rule(f))]
+    return [i.rule for rule in ARITHMETIC_RULES[doc_type] if (i := rule(f))]
 
 
 def candidates(rec: dict, rng: random.Random) -> list[dict]:

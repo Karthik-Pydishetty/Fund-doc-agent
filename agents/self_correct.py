@@ -79,12 +79,14 @@ def _ws(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def _ocr_clean(s: str) -> str:
+def _ocr_clean(s: str, join_numbers: bool = True) -> str:
+    """O-for-0 fixed; with join_numbers, "17, 176" -> "17,176" too. Text and date matching must not
+    join numbers: it would turn "September 30, 2025" into "September 30,2025"."""
     prev = None
     while prev != s:  # O between digits / commas / points is a zero
         prev = s
         s = re.sub(r"(?<=[\d,.])O|O(?=[\d,.])", "0", s)
-    return re.sub(r"(?<=\d),\s+(?=\d)", ",", s)
+    return re.sub(r"(?<=\d),\s+(?=\d)", ",", s) if join_numbers else s
 
 
 def numbers_in(quote: str) -> list[tuple[float, int]]:
@@ -111,7 +113,8 @@ def check_quote(quote: str, new_value, document_text: str) -> tuple[bool, str]:
         if shows_value(quote, new_value):
             return True, "quote shows value"
         return False, "quote does not show the new value"
-    if any(form.casefold() in _ws(_ocr_clean(quote)).casefold() for form in printed_forms(str(new_value))):
+    text = _ws(_ocr_clean(quote, join_numbers=False)).casefold()
+    if any(form.casefold() in text for form in printed_forms(str(new_value))):
         return True, "quote shows value"
     return False, "quote does not show the new value"
 

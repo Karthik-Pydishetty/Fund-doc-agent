@@ -17,7 +17,13 @@ All boundaries are inclusive.
 """
 from __future__ import annotations
 
+import datetime as dt
+import difflib
+import json
+import re
 from dataclasses import asdict, dataclass
+from functools import lru_cache
+from pathlib import Path
 
 STEPS = (10_000, 1_000, 100, 10, 1)
 MAX_STEP = STEPS[0]
@@ -116,8 +122,111 @@ def letter_net(f: dict) -> Issue | None:
                         f["long_exposure"] - f["short_exposure"], f["net_exposure"], PCT_TOL)
 
 
-RULES = {
+# --------------------------------------------------------------------------- sanity checks (Phase 9b)
+# Deterministic checks for fields the arithmetic rules can't see. They read only the extraction
+# (and the fund registry, an ops master list, not ground truth).
+
+DAYS_MIN, DAYS_MAX = 80, 100  # "about one quarter"
+REGISTRY_PATH = Path(__file__).resolve().parents[1] / "data" / "funds.json"
+NEAR_MISS_CUTOFF = 0.6
+NON_NEGATIVE = {
+    "CAS": ("management_fees", "incentive_fees", "total_commitment", "unfunded_commitment"),
+    "SOI": ("total_fair_value",),
+}
+SOI_HOLDING_NON_NEGATIVE = ("cost", "fair_value")
+QUARTER_LABEL = re.compile(r"^Q([1-4]) (\d{4})$")
+
+
+def _date(x) -> dt.date:
+    return x if isinstance(x, dt.date) else dt.date.fromisoformat(str(x))
+
+
+def _quarter_of(d: dt.date) -> tuple[dt.date, dt.date]:
+    q = (d.month - 1) // 3
+    start = dt.date(d.year, 3 * q + 1, 1)
+    nxt = dt.date(d.year + (q == 3), (3 * q + 3) % 12 + 1, 1)
+    return start, nxt - dt.timedelta(days=1)
+
+
+def cas_period_order(f: dict) -> Issue | None:
+    start, end = _date(f["period_start"]), _date(f["period_end"])
+    if end > start:
+        return None
+    return Issue("cas_period_order", "period_end is not after period_start",
+                 f"> {start.isoformat()}", end.isoformat(), (end - start).days)
+
+
+def cas_period_span(f: dict) -> Issue | None:
+    start, end = _date(f["period_start"]), _date(f["period_end"])
+    days = (end - start).days + 1
+    if end <= start or DAYS_MIN <= days <= DAYS_MAX:
+        return None  # order is cas_period_order's finding
+    return Issue("cas_period_span", f"reporting period is {days} days, not about one quarter",
+                 f"{DAYS_MIN}-{DAYS_MAX} days", days, None)
+
+
+def cas_period_quarter(f: dict) -> Issue | None:
+    """The stated period must be one calendar quarter (the label the statement implies)."""
+    start, end = _date(f["period_start"]), _date(f["period_end"])
+    if end <= start or not DAYS_MIN <= (end - start).days + 1 <= DAYS_MAX:
+        return None  # already reported by order / span
+    q_start, q_end = _quarter_of(start)
+    if (start, end) == (q_start, q_end):
+        return None
+    return Issue("cas_period_quarter", "period does not match a calendar quarter",
+                 f"{q_start.isoformat()} to {q_end.isoformat()}", f"{start.isoformat()} to {end.isoformat()}")
+
+
+def letter_quarter_label(f: dict) -> Issue | None:
+    if QUARTER_LABEL.match(str(f["quarter"]).strip()):
+        return None
+    return Issue("letter_quarter_label", "quarter is not a valid 'Q<1-4> <YYYY>' label", "Q<1-4> <YYYY>",
+                 f["quarter"])
+
+
+def _non_negative(rule: str, values: list[tuple[str, float]]) -> Issue | None:
+    neg = [(k, v) for k, v in values if v < 0]
+    if not neg:
+        return None
+    return Issue(rule, "negative value(s) where only zero or positive amounts are possible: "
+                 + ", ".join(f"{k}={v:,.2f}" for k, v in neg), ">= 0", neg[0][1], neg[0][1])
+
+
+def cas_non_negative(f: dict) -> Issue | None:
+    return _non_negative("cas_non_negative", [(k, f[k]) for k in NON_NEGATIVE["CAS"]])
+
+
+def soi_non_negative(f: dict) -> Issue | None:
+    vals = [(k, f[k]) for k in NON_NEGATIVE["SOI"]]
+    vals += [(f"holdings[{h['name']}].{k}", h[k]) for h in f["holdings"] for k in SOI_HOLDING_NON_NEGATIVE]
+    return _non_negative("soi_non_negative", vals)
+
+
+@lru_cache(maxsize=1)
+def fund_registry(path: Path = REGISTRY_PATH) -> tuple[str, ...]:
+    return tuple(x["fund_name"] for x in json.loads(Path(path).read_text())["funds"])
+
+
+def fund_in_registry(f: dict) -> Issue | None:
+    name = str(f["fund_name"])
+    names = fund_registry()
+    if name in names:
+        return None
+    close = difflib.get_close_matches(name, names, n=1, cutoff=NEAR_MISS_CUTOFF)
+    reason = f"fund name not in registry, closest: {close[0]}" if close else "fund name not in registry"
+    return Issue("fund_in_registry", reason, close[0] if close else "a registered fund name", name)
+
+
+# Arithmetic identities (Phase 4). The fault injector chooses faults by these alone, so a seeded
+# run injects the same faults however many sanity checks are added later.
+ARITHMETIC_RULES = {
     "CAS": [cas_rollforward, cas_unfunded_le_commitment],
     "SOI": [soi_fair_value_sum, soi_pct_sum],
     "LETTER": [letter_gross, letter_net],
 }
+SANITY_RULES = {
+    "CAS": [cas_period_order, cas_period_span, cas_period_quarter, cas_non_negative, fund_in_registry],
+    "SOI": [soi_non_negative, fund_in_registry],
+    "LETTER": [letter_quarter_label, fund_in_registry],
+}
+RULES = {t: ARITHMETIC_RULES[t] + SANITY_RULES[t] for t in ARITHMETIC_RULES}

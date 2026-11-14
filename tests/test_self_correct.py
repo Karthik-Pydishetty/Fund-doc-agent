@@ -168,9 +168,12 @@ def test_review_schema_wraps_extraction():
     ("Short (77.9)%", 77.9, True),
     ("07/O1/2025", "2025-07-01", True),
     ("07/O1/2025", "2024-07-01", False),
+    ("Reporting Period: July 1, 2025 to September 30, 2025", "2025-09-30", True),   # "30, 2025" not joined
+    ("Reporting Period: July 1, 2025 to September 30, 2025", "2024-09-30", False),
 ])
 def test_quote_must_show_the_new_value(quote, value, ok):
-    doc = "Ending capital $17, 176,7O9\nOpening capital 6,592\n€14.14 million\nShort (77.9)%\nPeriod: 07/O1/2025"
+    doc = ("Ending capital $17, 176,7O9\nOpening capital 6,592\n€14.14 million\nShort (77.9)%\nPeriod: 07/O1/2025\n"
+           "Reporting Period: July 1, 2025 to September 30, 2025")
     assert check_quote(quote, value, doc)[0] is ok
 
 
@@ -196,7 +199,9 @@ def test_injection_is_seeded_mixed_and_recorded():
         if f["category"] == "covered":
             assert f["rules_broken"] and set(f["rules_broken"]) <= set(failing)
         else:
-            assert f["rules_broken"] == [] and r["validation"]["status"] == "ACCEPTED"
+            assert f["rules_broken"] == []  # breaks no arithmetic rule (selection is by arithmetic rules only)
+            if f["field"] in ("fund_name", "period_start", "period_end"):  # caught by the Phase 9b checks
+                assert r["validation"]["status"] == "EXCEPTION"
             assert isinstance(f["original"], str) is (f["category"] == "uncovered_text")
 
 
@@ -252,7 +257,9 @@ def test_run_pipeline_logs_faults_and_retries(tmp_path):
     # the fake review returns the true values but lists no `changes`, so every correction lacks a quote and is reverted
     for r in covered:
         assert r["self_correction"]["changes"] and not any(c["accepted"] for c in r["self_correction"]["changes"])
-    assert client.reviews == 1 + len(covered)  # one retry per rule-failing doc, never more
+    failing = [r for r in faulted if "self_correction" in r]
+    assert set(map(id, covered)) <= set(map(id, failing))
+    assert client.reviews == 1 + len(failing)  # one retry per rule-failing doc, never more
     logged = [json.loads(x) for x in log.read_text().splitlines()]
     assert logged[0]["fault_summary"] == header["fault_summary"]
     assert regression.latest_run_log(tmp_path, "main") is None            # gate ignores fault runs

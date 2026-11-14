@@ -1,0 +1,47 @@
+{
+  "description": "Fund master list (synthetic): every fund the generator uses. Validation requires an extracted fund_name to match one entry exactly.",
+  "funds": [
+    {
+      "fund_name": "Granite Peak Capital Partners III, L.P.",
+      "manager": "Granite Peak Advisors LLC",
+      "strategy": "private",
+      "currency": "USD"
+    },
+    {
+      "fund_name": "Bluewater Infrastructure Fund II, L.P.",
+      "manager": "Bluewater Capital Management LP",
+      "strategy": "private",
+      "currency": "USD"
+    },
+    {
+      "fund_name": "Kestrel Growth Equity Fund IV, SCSp",
+      "manager": "Kestrel Partners S.a r.l.",
+      "strategy": "private",
+      "currency": "EUR"
+    },
+    {
+      "fund_name": "Thornbury Private Credit Opportunities Fund",
+      "manager": "Thornbury Asset Management LLP",
+      "strategy": "private",
+      "currency": "GBP"
+    },
+    {
+      "fund_name": "Silverline Long/Short Equity Fund, Ltd.",
+      "manager": "Silverline Investment Partners LP",
+      "strategy": "long_short",
+      "currency": "USD"
+    },
+    {
+      "fund_name": "Ironbark Global Opportunities Fund, L.P.",
+      "manager": "Ironbark Capital LLC",
+      "strategy": "long_short",
+      "currency": "USD"
+    },
+    {
+      "fund_name": "Calder Ridge Market Neutral Partners",
+      "manager": "Calder Ridge Management LP",
+      "strategy": "long_short",
+      "currency": "USD"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ from validation.validate import ACCEPTED, EXCEPTION, validate_record, write_exce
 
 ROOT = Path(__file__).resolve().parents[1]
 TRUTH = json.loads((ROOT / "data/ground_truth.json").read_text())["documents"]
+REGISTERED = rules.fund_registry()[0]
 
 
 # --------------------------------------------------------------------------- fixtures
@@ -18,7 +19,7 @@ TRUTH = json.loads((ROOT / "data/ground_truth.json").read_text())["documents"]
 def cas(**kw):
     """Full-unit CAS (1,000,003 pins the printed step to 1). Rolls forward exactly:
     1,000,003 + 100,000 - 50,000 - 10,000 - 20,000 - 20,000 = 1,000,003."""
-    f = dict(fund_name="F", manager="M", investor_name="I", period_start="2025-01-01", period_end="2025-03-31",
+    f = dict(fund_name=REGISTERED, manager="M", investor_name="I", period_start="2025-01-01", period_end="2025-03-31",
              currency="USD", beginning_nav=1_000_003.0, contributions=100_000.0, distributions=50_000.0,
              management_fees=10_000.0, incentive_fees=20_000.0, net_gain_loss=-20_000.0, ending_nav=1_000_003.0,
              total_commitment=2_000_000.0, unfunded_commitment=500_000.0, confidence=0.95)
@@ -38,12 +39,12 @@ def cas_scaled(step):
 def soi(fvs=(600_001.0, 400_000.0), pcts=(60.0, 40.0), total=None, **kw):
     hs = [dict(name=f"H{i}", sector="S", geography="G", cost=fv, fair_value=fv, pct_of_nav=p)
           for i, (fv, p) in enumerate(zip(fvs, pcts))]
-    return dict(fund_name="F", as_of_date="2025-03-31", holdings=hs,
+    return dict(fund_name=REGISTERED, as_of_date="2025-03-31", holdings=hs,
                 total_fair_value=sum(fvs) if total is None else total, confidence=0.95, **kw)
 
 
 def letter(long_=140.0, short=60.0, gross=200.0, net=80.0, **kw):
-    f = dict(fund_name="F", quarter="Q1 2025", long_exposure=long_, short_exposure=short, gross_exposure=gross,
+    f = dict(fund_name=REGISTERED, quarter="Q1 2025", long_exposure=long_, short_exposure=short, gross_exposure=gross,
              net_exposure=net, top_sector_exposures=[], top_holdings=[], quarterly_return=1.0,
              commentary_summary="c", confidence=0.95)
     return {**f, **kw}

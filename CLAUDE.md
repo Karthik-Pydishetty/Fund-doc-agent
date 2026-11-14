@@ -47,6 +47,7 @@ main.py               runs the full pipeline
 7. **Hard split + Sonnet vs. Haiku**: a second, harder test set in `data/hard/` (own ground truth, own baseline; `data/` untouched). Run v1 prompts on it with Sonnet and Haiku side by side (accuracy, router, exceptions, cost, latency, every missed field). Sonnet v1 becomes the hard-split baseline.
 8. ~~**v2 prompts for hard-split misses**~~ **Skipped**: v1 prompts scored 100% field accuracy on both splits with both Sonnet and Haiku, so there were no misses to target.
 9. **Self-correction loop**: when validation fails or confidence is low, re-ask the extractor with the specific problem, bounded retries; must never "fix" a document that is genuinely inconsistent.
+9b. **Close the blind spot with deterministic checks** (done): CAS period order / ~one-quarter span (80-100 days) / calendar-quarter alignment, LETTER quarter label format, non-negativity (fees, commitments, SOI cost, fair value, total), and `fund_name` must exactly match `data/funds.json` (near miss -> "fund name not in registry, closest: X"). `data/funds.json` is the one file added to `data/` (an ops fund master list, not ground truth). Faults are still chosen by the arithmetic rules only, so seeded runs inject the same faults. Compare runs per fault with `python -m evals.blind_spot BEFORE AFTER`.
 10. **Read-only MCP server**: e.g. `get_fund_summary(fund_name)` over logged, validated results. No writes, no pipeline runs.
 11. **Final README update**: hard split, model comparison, v2 and self-correction results, MCP usage.
 
