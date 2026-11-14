@@ -7,27 +7,36 @@ import pytest
 
 from evals.exceptions import score
 from validation import rules
-from validation.rules import PCT_TOL, REL_TOL
 from validation.validate import ACCEPTED, EXCEPTION, validate_record, write_exceptions_report
 
 ROOT = Path(__file__).resolve().parents[1]
 TRUTH = json.loads((ROOT / "data/ground_truth.json").read_text())["documents"]
-STEP = 0.01  # "just past the edge"
 
 
 # --------------------------------------------------------------------------- fixtures
 
 def cas(**kw):
-    # rolls forward exactly: 1,000,000 + 100,000 - 50,000 - 10,000 - 20,000 - 20,000 = 1,000,000
+    """Full-unit CAS (1,000,003 pins the printed step to 1). Rolls forward exactly:
+    1,000,003 + 100,000 - 50,000 - 10,000 - 20,000 - 20,000 = 1,000,003."""
     f = dict(fund_name="F", manager="M", investor_name="I", period_start="2025-01-01", period_end="2025-03-31",
-             currency="USD", beginning_nav=1_000_000.0, contributions=100_000.0, distributions=50_000.0,
-             management_fees=10_000.0, incentive_fees=20_000.0, net_gain_loss=-20_000.0, ending_nav=1_000_000.0,
+             currency="USD", beginning_nav=1_000_003.0, contributions=100_000.0, distributions=50_000.0,
+             management_fees=10_000.0, incentive_fees=20_000.0, net_gain_loss=-20_000.0, ending_nav=1_000_003.0,
              total_commitment=2_000_000.0, unfunded_commitment=500_000.0, confidence=0.95)
     return {**f, **kw}
 
 
-def soi(fvs=(600_000.0, 400_000.0), pcts=(60.0, 40.0), total=None, **kw):
-    hs = [dict(name=f"H{i}", sector="S", geography="G", cost=1.0, fair_value=fv, pct_of_nav=p)
+def cas_scaled(step):
+    """Same statement printed in k (step 1,000) or mm (step 10,000): every amount a multiple of step."""
+    f = cas(beginning_nav=27_180_000.0, contributions=1_130_000.0, distributions=0.0, management_fees=180_000.0,
+            incentive_fees=40_000.0, net_gain_loss=240_000.0, ending_nav=28_330_000.0,
+            total_commitment=38_000_000.0, unfunded_commitment=13_020_000.0)
+    if step == 1_000:
+        f.update(contributions=1_131_000.0, ending_nav=28_331_000.0)  # 1,131k pins the step to 1,000
+    return f
+
+
+def soi(fvs=(600_001.0, 400_000.0), pcts=(60.0, 40.0), total=None, **kw):
+    hs = [dict(name=f"H{i}", sector="S", geography="G", cost=fv, fair_value=fv, pct_of_nav=p)
           for i, (fv, p) in enumerate(zip(fvs, pcts))]
     return dict(fund_name="F", as_of_date="2025-03-31", holdings=hs,
                 total_fair_value=sum(fvs) if total is None else total, confidence=0.95, **kw)
@@ -45,58 +54,98 @@ def rec(doc_type, extracted, route_conf=0.95, error=None, file="doc_999.pdf"):
             "extracted": extracted, "error": error}
 
 
+# --------------------------------------------------------------------------- printed precision
+
+@pytest.mark.parametrize("values,step", [
+    ((1_234_567, 45_000), 1.0),                 # "$1,234,567"
+    ((1_235_000, 45_000, 0), 1_000.0),          # "$1,235k" / in thousands
+    ((27_180_000, 1_130_000, 180_000), 10_000.0),  # "$27.18mm"
+    ((38_000_000, 2_000_000), 10_000.0),        # all round: capped at MAX_STEP
+    ((1_234_567.25, 45_000), 0.01),             # cents
+    ((0, 0), 1.0),
+])
+def test_printed_step(values, step):
+    assert rules.printed_step(values) == step
+
+
 # --------------------------------------------------------------------------- CAS rules
 
 def test_cas_rollforward_clean():
     assert rules.cas_rollforward(cas()) is None
 
 
-@pytest.mark.parametrize("ending,ok", [
-    # roll-forward = 1,000,000; tol = 0.5% of max(|beginning|, |ending|)
-    (995_000.0, True),           # diff -5,000; ref 1,000,000 -> tol 5,000 (exact edge)
-    (995_000.0 - STEP, False),   # just past
-    (1_005_025.0, True),         # diff +5,025; ref 1,005,025 -> tol 5,025.125
-    (1_005_026.0, False),        # diff +5,026; tol 5,025.13
-])
-def test_cas_rollforward_tolerance_edge(ending, ok):
-    issue = rules.cas_rollforward(cas(ending_nav=ending))
+@pytest.mark.parametrize("delta,ok", [(7, True), (-7, True), (8, False), (-8, False)])
+def test_cas_rollforward_full_unit_edge(delta, ok):
+    # step 1 x 7 terms = 7 units
+    issue = rules.cas_rollforward(cas(ending_nav=1_000_003.0 + delta))
     assert (issue is None) is ok
     if issue:
-        assert issue.rule == "cas_rollforward" and issue.expected == 1_000_000 and issue.actual == ending
+        assert issue.expected == 1_000_003 and issue.difference == delta and issue.tolerance == 7
+
+
+def test_cas_rollforward_60k_error_on_full_unit_doc_is_caught():
+    """A 60,000 error on a ~$15mm full-unit statement passed the old 0.5% tolerance (75k); now it fails."""
+    f = cas(beginning_nav=15_090_123.0, contributions=0.0, distributions=400_000.0, management_fees=140_000.0,
+            incentive_fees=0.0, net_gain_loss=-780_000.0, ending_nav=13_770_123.0,
+            total_commitment=29_250_000.0, unfunded_commitment=15_380_000.0)
+    assert rules.cas_rollforward(f) is None
+    issue = rules.cas_rollforward({**f, "ending_nav": 13_770_123.0 + 60_000})
+    assert issue is not None
+    assert issue.difference == 60_000 and issue.tolerance == 7
+
+
+@pytest.mark.parametrize("step", [1_000, 10_000])
+def test_cas_rollforward_scaled_edge(step):
+    # k / mm statements: tolerance = step x 7 terms; edges stay on the printed grid so the step is unchanged
+    f = cas_scaled(step)
+    assert rules.cas_step(f) == step
+    assert rules.cas_rollforward(f) is None
+    assert rules.cas_rollforward({**f, "ending_nav": f["ending_nav"] + 7 * step}) is None
+    assert rules.cas_rollforward({**f, "ending_nav": f["ending_nav"] - 7 * step}) is None
+    issue = rules.cas_rollforward({**f, "ending_nav": f["ending_nav"] + 8 * step})
+    assert issue and issue.tolerance == 7 * step
 
 
 def test_cas_rollforward_mm_rounding_passes():
-    # every component printed to the nearest 10k ("$x.xxmm"): 7 roundings of up to 5k each still pass
-    assert rules.cas_rollforward(cas(beginning_nav=27_180_000, contributions=1_130_000, distributions=0,
-                                     management_fees=180_000, incentive_fees=40_000, net_gain_loss=240_000,
-                                     ending_nav=28_330_000 + 35_000)) is None
+    # each of 7 terms printed to the nearest 10k is off by <= 5k: worst case 35k < 70k tolerance
+    f = cas_scaled(10_000)
+    assert rules.cas_rollforward({**f, "ending_nav": f["ending_nav"] + 30_000}) is None
 
 
 def test_cas_rollforward_detects_doc021_magnitude():
-    # doc_021: printed ending 14,140,000 vs roll-forward 13,770,000 (diff 370,000 >> tol 70,700)
+    # doc_021 (printed "€x.xx million"): ending 14,140,000 vs roll-forward 13,770,000; tol 70,000
     f = cas(beginning_nav=15_090_000, contributions=0, distributions=400_000, management_fees=140_000,
-            incentive_fees=0, net_gain_loss=-780_000, ending_nav=14_140_000)
+            incentive_fees=0, net_gain_loss=-780_000, ending_nav=14_140_000,
+            total_commitment=29_250_000, unfunded_commitment=15_380_000)
     issue = rules.cas_rollforward(f)
     assert issue.expected == 13_770_000 and issue.actual == 14_140_000 and issue.difference == 370_000
+    assert issue.tolerance == 70_000
 
 
-def test_cas_unfunded_edge():
-    tol = REL_TOL * 2_000_000  # 10,000
-    assert rules.cas_unfunded_le_commitment(cas(unfunded_commitment=2_000_000.0)) is None
-    assert rules.cas_unfunded_le_commitment(cas(unfunded_commitment=2_000_000.0 + tol)) is None
-    issue = rules.cas_unfunded_le_commitment(cas(unfunded_commitment=2_000_000.0 + tol + STEP))
-    assert issue and issue.rule == "cas_unfunded_le_commitment"
+@pytest.mark.parametrize("excess,ok", [(-1.0, True), (0.0, True), (1.0, True), (1.01, False), (10_000.0, False)])
+def test_cas_unfunded_strict_edge(excess, ok):
+    # $1 tolerance regardless of print precision, even on an mm statement
+    for f in (cas(), cas_scaled(10_000)):
+        issue = rules.cas_unfunded_le_commitment({**f, "unfunded_commitment": f["total_commitment"] + excess})
+        assert (issue is None) is ok
+        if issue:
+            assert issue.tolerance == 1.0
 
 
 # --------------------------------------------------------------------------- SOI rules
 
-def test_soi_fair_value_sum_edge():
-    # holdings sum to 1,000,000; reference = max(total, sum)
-    assert rules.soi_fair_value_sum(soi()) is None
-    assert rules.soi_fair_value_sum(soi(total=995_000.0)) is None            # diff 5,000 = 0.5% of 1,000,000
-    assert rules.soi_fair_value_sum(soi(total=995_000.0 - STEP)) is not None
-    assert rules.soi_fair_value_sum(soi(total=1_005_025.0)) is None          # ref 1,005,025 -> tol 5,025.125
-    assert rules.soi_fair_value_sum(soi(total=1_005_026.0)) is not None
+@pytest.mark.parametrize("delta,ok", [(0, True), (3, True), (-3, True), (4, False), (-4, False)])
+def test_soi_fair_value_sum_full_unit_edge(delta, ok):
+    # holdings sum 1,000,001 at step 1; 2 holdings + total = 3 terms -> tol 3
+    assert (rules.soi_fair_value_sum(soi(total=1_000_001.0 + delta)) is None) is ok
+
+
+@pytest.mark.parametrize("delta,ok", [(3_000, True), (-3_000, True), (4_000, False), (-4_000, False)])
+def test_soi_fair_value_sum_thousands_edge(delta, ok):
+    # "(in thousands)": step 1,000 x 3 terms = 3,000
+    f = soi(fvs=(36_957_000.0, 22_835_000.0), total=59_792_000.0 + delta)
+    assert rules.soi_step(f) == 1_000
+    assert (rules.soi_fair_value_sum(f) is None) is ok
 
 
 @pytest.mark.parametrize("pcts,ok", [
@@ -168,12 +217,12 @@ def test_schema_invalid_goes_to_exceptions():
 
 
 def test_rule_failure_flagged_despite_high_confidence():
-    res = validate_record(rec("CAS", cas(ending_nav=1_100_000.0, confidence=0.95)))
+    res = validate_record(rec("CAS", cas(ending_nav=1_100_003.0, confidence=0.95)))
     assert res.status == EXCEPTION and _rules(res) == ["cas_rollforward"]
 
 
 def test_multiple_reasons_each_get_a_row(tmp_path):
-    res = validate_record(rec("CAS", cas(ending_nav=1_100_000.0, unfunded_commitment=3_000_000.0, confidence=0.5)))
+    res = validate_record(rec("CAS", cas(ending_nav=1_100_003.0, unfunded_commitment=3_000_000.0, confidence=0.5)))
     assert _rules(res) == ["cas_rollforward", "cas_unfunded_le_commitment", "low_confidence"]
     out = tmp_path / "x.csv"
     assert write_exceptions_report([res, validate_record(rec("CAS", cas()))], out) == 3
@@ -181,8 +230,8 @@ def test_multiple_reasons_each_get_a_row(tmp_path):
     assert [r["rule"] for r in rows] == _rules(res)
     r0 = rows[0]
     assert r0["doc_id"] == "doc_999" and r0["doc_type"] == "CAS" and r0["confidence"] == "0.5"
-    assert float(r0["expected"]) == 1_000_000 and float(r0["actual"]) == 1_100_000
-    assert float(r0["difference"]) == 100_000 and r0["tolerance"]
+    assert float(r0["expected"]) == 1_000_003 and float(r0["actual"]) == 1_100_003
+    assert float(r0["difference"]) == 100_000 and float(r0["tolerance"]) == 7
 
 
 # --------------------------------------------------------------------------- ground truth sanity
@@ -195,3 +244,13 @@ def test_rules_pass_every_clean_truth_doc_and_fail_every_broken_one():
     s = score(results, TRUTH)
     assert s["fp"] == [] and s["fn"] == [] and s["precision"] == s["recall"] == 1.0
     assert sorted(s["unknown_flagged"]) == sorted(s["unknown"])
+
+
+def test_inferred_step_matches_each_truth_docs_print_format():
+    """The step validation infers from values alone agrees with how the generator printed each doc."""
+    printed = {"full": 1, "plain": 1, "decimals": 1, "k": 1_000, "mm": 10_000, "words": 10_000, "thousands": 1_000}
+    for d in TRUTH:
+        if d["doc_type"] == "CAS":
+            assert rules.cas_step(d["fields"]) == printed[d["number_format"]], d["doc_id"]
+        elif d["doc_type"] == "SOI":
+            assert rules.soi_step(d["fields"]) == printed[d["number_format"]], d["doc_id"]
