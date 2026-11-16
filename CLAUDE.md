@@ -88,5 +88,7 @@ main.py               runs the full pipeline
 - Self-correction: `--self-correct` on main.py / run_eval (one retry on finance-rule failures; changed values need a verbatim quote checked in code). Measure it with `--inject-faults N [--fault-seed S]` (experiment runs; ignored by the regression gate, never saved as a baseline), then `python -m evals.self_correction`
 - MCP server (read-only, stdio): `python -m mcp_server` (tools: list_exceptions, get_document, get_fund_summary). Reads the newest main-split, non-fault run log (override `FUND_DOCS_LOG=<log>` or `FUND_DOCS_SPLIT=hard`) and `exceptions_report.csv` only when it matches that run; never ground truth, never a model, never a write. Tests: `tests/test_mcp_server.py`
 
+- Results report (offline): `python -m evals.report` -> `reports/results.html` (self-contained; headline, gate, per-field, Sonnet vs Haiku, self-correction, exceptions, run history). Tests: `tests/test_report.py`
+
 ## Current phase
 Phase 11
