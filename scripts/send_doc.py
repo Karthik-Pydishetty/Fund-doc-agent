@@ -38,8 +38,12 @@ def main() -> int:
 
     with httpx.Client(base_url=args.url, timeout=30) as http:
         t0 = time.monotonic()
-        r = http.post("/documents", content=body, headers={"Content-Type": "application/pdf",
-                                                           "X-Signature": signature, "X-Filename": path.name})
+        try:
+            r = http.post("/documents", content=body, headers={"Content-Type": "application/pdf",
+                                                               "X-Signature": signature, "X-Filename": path.name})
+        except httpx.ConnectError:
+            sys.exit(f"Cannot reach the webhook service at {args.url}. Start it first in another terminal:\n"
+                     f"    python -m service")
         print(f"POST /documents -> {r.status_code}")
         print(json.dumps(r.json(), indent=2))
         if r.status_code not in (200, 202):
