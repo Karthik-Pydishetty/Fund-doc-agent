@@ -11,3 +11,7 @@ __pycache__/
 # Outputs
 exceptions_report.csv
 .DS_Store
+
+# Webhook service uploads
+service_data/
+.claude/launch.json

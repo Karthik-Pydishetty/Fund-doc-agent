@@ -202,7 +202,8 @@ def test_real_run_exception_queue(real_log):
     out = call("list_exceptions")
     assert out["source"]["run_log"] == "runs/20261114T013741Z_pipeline.jsonl"
     by = {e["doc_id"]: e for e in out["exceptions"]}
-    assert set(by) == {"doc_005", "doc_014", "doc_017", "doc_021", "doc_028", "doc_032"}
+    main_ids = {d for d in by if d.startswith("doc_")}      # webhook uploads (SHA-256 ids) are merged in too
+    assert main_ids == {"doc_005", "doc_014", "doc_017", "doc_021", "doc_028", "doc_032"}
     roll = by["doc_021"]["failed_checks"][0]
     assert (roll["rule"], roll["expected"], roll["actual"]) == ("cas_rollforward", 13_770_000, 14_140_000)
 

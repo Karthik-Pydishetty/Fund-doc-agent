@@ -3,6 +3,8 @@
 Sources, and nothing else:
   - one pipeline run log in runs/ (default: the newest run of the main split that is not a
     fault-injection experiment; override with FUND_DOCS_LOG=<path> or FUND_DOCS_SPLIT=hard)
+  - documents received by the webhook service (service/): every run log with "split": "webhook" in the
+    same folder, merged in by document id (the file's SHA-256)
   - exceptions_report.csv, used only when it belongs to that run: the pipeline rewrites the file
     on every run and records no run id in it, so its (doc_id, rule) rows must match the log's
     validation results; otherwise the log's own validation results are used and the reply says so.
@@ -47,6 +49,7 @@ class Run:
     log: Path
     header: dict
     records: dict[str, dict]                      # doc_id -> record
+    webhook_logs: list[Path] = field(default_factory=list)
     report_rows: list[dict] = field(default_factory=list)
     report_used: bool = False
     note: str | None = None
@@ -56,6 +59,8 @@ class Run:
         return {"run_log": _rel(self.log), "run_started": h.get("timestamp"), "split": h.get("split", "main"),
                 "model": h.get("model"), "prompt_versions": h.get("prompt_versions"),
                 "self_correct": bool(h.get("self_correct")),
+                "webhook_logs": [_rel(p) for p in self.webhook_logs],
+                "webhook_documents": sum(1 for r in self.records.values() if r.get("webhook")),
                 "exceptions_source": "exceptions_report.csv" if self.report_used else "run log validation",
                 **({"note": self.note} if self.note else {})}
 
@@ -79,6 +84,15 @@ def load(log: Path | None = None, report: Path = REPORT) -> Run:
     for r in records.values():
         r["validation"] = _validation(r)
     run = Run(log, lines[0], records)
+    for wl in sorted(log.parent.glob("*_pipeline.jsonl")):  # webhook documents, newest record wins
+        wlines = [json.loads(x) for x in wl.read_text().splitlines() if x.strip()]
+        if wl == log or not wlines or wlines[0].get("split") != "webhook":
+            continue
+        run.webhook_logs.append(wl)
+        for r in wlines[1:]:
+            if "file" in r:
+                r["validation"] = _validation(r)
+                records[Path(r["file"]).stem] = r
 
     log_pairs = {(d, i["rule"]) for d, r in records.items() for i in r["validation"]["issues"]}
     if report.exists():
@@ -133,8 +147,12 @@ def _confidence(rec: dict):
 
 
 def resolve_doc_id(run: Run, doc_id: str) -> str | None:
+    """Exact id ('doc_021', 'doc_021.pdf'), or a unique prefix of 8+ characters (webhook SHA-256 ids)."""
     key = Path(str(doc_id).strip()).stem
-    return key if key in run.records else None
+    if key in run.records:
+        return key
+    hits = [k for k in run.records if len(key) >= 8 and k.startswith(key)]
+    return hits[0] if len(hits) == 1 else None
 
 
 # --------------------------------------------------------------------------- tools
@@ -145,6 +163,7 @@ def list_exceptions(run: Run) -> dict:
         if rec["validation"]["status"] != "EXCEPTION":
             continue
         items.append({"doc_id": doc_id, "doc_type": _doc_type(rec), "confidence": _confidence(rec),
+                      **({"received_via_webhook": rec["webhook"].get("filename")} if rec.get("webhook") else {}),
                       "failed_checks": _issues(run, doc_id), "retry_history": _retry(rec)})
     return {"source": run.source(), "count": len(items), "documents_in_run": len(run.records), "exceptions": items}
 
@@ -156,6 +175,7 @@ def get_document(run: Run, doc_id: str) -> dict:
                 "available_doc_ids": sorted(run.records)}
     rec = run.records[key]
     out = {"source": run.source(), "doc_id": key, "file": rec["file"],
+           **({"webhook": rec["webhook"]} if rec.get("webhook") else {}),
            "route": rec.get("route"), "extracted": rec.get("extracted"), "extraction_error": rec.get("error"),
            "validation": {"status": rec["validation"]["status"], "failed_checks": _issues(run, key)},
            "retry_history": _retry(rec)}

@@ -52,14 +52,19 @@ def load_runs(runs_dir: Path = RUNS) -> list[dict]:
         statuses = stored if all(stored) else [v.status for v in validate_records(records)]
         cost = run_cost(header, records)
         runs.append({
-            "path": path, "name": str(path.relative_to(ROOT)), "header": header, "records": records,
+            "path": path, "name": str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path),
+            "header": header, "records": records,
             "split": split, "model": header.get("model"), "time": header.get("timestamp", ""),
             "fault": bool(header.get("inject_faults")), "self_correct": bool(header.get("self_correct")),
             "base_commit": (evals[0]["git"]["commit"] if evals else None),
-            "metrics": compute_metrics(records, split=split), "cost": cost,
+            # webhook uploads have no answer key: no accuracy, only exceptions and cost
+            "metrics": compute_metrics(records, split=split) if split in SPLITS else None, "cost": cost,
             "exception_rate": sum(s == EXCEPTION for s in statuses) / len(statuses) if statuses else 0.0,
         })
     for i, r in enumerate(runs):
+        if r["split"] not in SPLITS:  # webhook sessions add documents; none replaces another
+            r["superseded_by"] = None
+            continue
         later = [x for x in runs[i + 1:] if _config(x["header"]) == _config(r["header"])]
         r["superseded_by"] = next((x["name"] for x in later
                                    if r["base_commit"] is None or x["base_commit"] == r["base_commit"]), None)
@@ -67,7 +72,8 @@ def load_runs(runs_dir: Path = RUNS) -> list[dict]:
 
 
 def label(r: dict) -> str:
-    tags = ([f"fault-injection ({r['header'].get('inject_faults')} faults)"] if r["fault"] else []) + \
+    tags = (["webhook uploads"] if r["split"] == "webhook" else []) + \
+           ([f"fault-injection ({r['header'].get('inject_faults')} faults)"] if r["fault"] else []) + \
            (["self-correct"] if r["self_correct"] and not r["fault"] else []) + \
            ([f"superseded by {Path(r['superseded_by']).name[:16]}"] if r["superseded_by"] else [])
     return ", ".join(tags)
@@ -307,6 +313,24 @@ def sec_exceptions(runs) -> str:
                              esc(num(i.actual)), esc(num(i.difference)), esc(i.reason)])
         out.append(f"<h3>{s} split · {len({x[0] for x in rows})} documents flagged</h3>" +
                    table(["Doc", "Type", "Rule", "Expected", "Actual", "Difference", "Reason"], rows))
+    wh_runs = [r for r in runs if r["split"] == "webhook"]
+    if wh_runs:
+        latest = {}
+        for r in wh_runs:
+            for rec in r["records"]:
+                latest[Path(rec["file"]).stem] = rec
+        rows = []
+        for v in validate_records(list(latest.values())):
+            rec = latest[v.doc_id]
+            name = (rec.get("webhook") or {}).get("filename") or "—"
+            for i in v.issues:
+                rows.append([f"<code>{esc(v.doc_id[:12])}</code> ({esc(name)})", esc(v.doc_type or "—"),
+                             f"<code>{esc(i.rule)}</code>", esc(num(i.expected)), esc(num(i.actual)),
+                             esc(num(i.difference)), esc(i.reason)])
+        out.append(uses(*wh_runs) +
+                   f"<h3>webhook uploads · {len({x[0] for x in rows})} of {len(latest)} documents flagged</h3>" +
+                   (table(["Doc (SHA-256 prefix)", "Type", "Rule", "Expected", "Actual", "Difference", "Reason"], rows)
+                    if rows else "<p>None flagged.</p>"))
     return "".join(out)
 
 
@@ -317,18 +341,20 @@ def chart(runs) -> str:
     n = len(runs)
     xs = [left + (i + 0.5) * (W - left - right) / n for i in range(n)]
     panels = [
-        ("Field accuracy", lambda r: r["metrics"]["field_accuracy_overall"] * 100, lambda v: f"{v:.1f}%", None),
+        ("Field accuracy", lambda r: r["metrics"]["field_accuracy_overall"] * 100 if r["metrics"] else None,
+         lambda v: f"{v:.1f}%", None),
         ("Exception rate (share of docs flagged)", lambda r: r["exception_rate"] * 100, lambda v: f"{v:.0f}%", 0.0),
         ("Cost per doc (list price)", lambda r: (r["cost"]["usd"] or 0) / max(1, r["cost"]["n"]),
          lambda v: f"${v:.3f}", 0.0),
     ]
-    color = {"main": "var(--s1)", "hard": "var(--s2)"}
+    color = {"main": "var(--s1)", "hard": "var(--s2)", "webhook": "var(--s3)"}
     parts = []
     y0 = top
     for title, get, fmt, floor in panels:
         vals = [get(r) for r in runs]
-        lo = floor if floor is not None else max(0.0, min(vals) - max(0.5, (max(vals) - min(vals)) * 0.2))
-        hi = max(vals) * 1.15 if floor is not None else 100.0
+        known = [v for v in vals if v is not None]
+        lo = floor if floor is not None else max(0.0, min(known) - max(0.5, (max(known) - min(known)) * 0.2))
+        hi = max(known) * 1.15 if floor is not None else 100.0
         lo = min(lo, hi - 1e-9)
         Y = lambda v: y0 + ph - (v - lo) / (hi - lo) * ph  # noqa: E731
         parts.append(f'<text x="{left - 56}" y="{y0 - 14}" class="pt">{esc(title)}</text>')
@@ -338,6 +364,8 @@ def chart(runs) -> str:
             parts.append(f'<line x1="{left}" x2="{W - right}" y1="{ty:.1f}" y2="{ty:.1f}" class="grid"/>'
                          f'<text x="{left - 8}" y="{ty + 4:.1f}" class="tick" text-anchor="end">{esc(fmt(tv))}</text>')
         for r, x, v in zip(runs, xs, vals):
+            if v is None:  # no answer key for this run (webhook uploads)
+                continue
             faded = " faded" if r["superseded_by"] else ""
             fill = "var(--surface)" if r["fault"] else color[r["split"]]
             tip = (f"{r['path'].name[:16]} · {r['split']} · {r['model']}\n{title}: {fmt(v)}"
@@ -352,13 +380,13 @@ def chart(runs) -> str:
     usual = max(set(models), key=models.count)
     for i, (r, x) in enumerate(zip(runs, xs)):
         t = dt.datetime.fromisoformat(r["time"])
-        flag = "F" if r["fault"] else ("S" if r["superseded_by"] else "")
+        flag = "F" if r["fault"] else ("S" if r["superseded_by"] else ("W" if r["split"] == "webhook" else ""))
         if r["model"] != usual:  # name the odd model out on the axis, e.g. the Haiku run
             flag = (flag + " " if flag else "") + r["model"].split("-")[1].capitalize()
         parts.append(f'<text x="{x:.1f}" y="{axis_y}" class="tick" text-anchor="middle">{t:%H:%M}</text>'
                      f'<text x="{x:.1f}" y="{axis_y + 14}" class="tick" text-anchor="middle">{esc(flag)}</text>')
     parts.append(f'<text x="{left}" y="{axis_y + 32}" class="tick">Runs in time order ({esc(runs[0]["time"][:10])} '
-                 f'to {esc(runs[-1]["time"][:10])}, UTC). F = fault-injection, S = superseded; model {esc(usual)} unless named.</text>')
+                 f'to {esc(runs[-1]["time"][:10])}, UTC). F = fault-injection, S = superseded, W = webhook uploads; model {esc(usual)} unless named.</text>')
     H = axis_y + 44
     return (f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Field accuracy, exception rate and cost per doc '
             f'for every logged run">{"".join(parts)}</svg>')
@@ -367,10 +395,11 @@ def chart(runs) -> str:
 def sec_history(runs) -> str:
     legend = ('<div class="legend"><span><i class="dot" style="background:var(--s1)"></i>main split</span>'
               '<span><i class="dot" style="background:var(--s2)"></i>hard split</span>'
+              '<span><i class="dot" style="background:var(--s3)"></i>webhook uploads (no accuracy: no answer key)</span>'
               '<span><i class="dot ring"></i>fault-injection run (hollow)</span>'
               '<span><i class="dot" style="background:var(--s1);opacity:.35"></i>superseded run (faded)</span></div>')
     rows = [[esc(when(r)), f"<code>{esc(r['path'].name[:16])}</code>", esc(r["split"]), esc(r["model"]),
-             pct(r["metrics"]["field_accuracy_overall"]), pct(r["exception_rate"], 0),
+             pct(r["metrics"]["field_accuracy_overall"]) if r["metrics"] else "n/a", pct(r["exception_rate"], 0),
              usd((r["cost"]["usd"] or 0) / max(1, r["cost"]["n"])), esc(label(r) or "—")] for r in runs]
     return (uses(*runs) + legend + f'<figure class="chart">{chart(runs)}</figure>' +
             "<p class='note'>Fault-injection runs corrupt extracted values on purpose before the retry, so their "
@@ -385,9 +414,9 @@ def sec_history(runs) -> str:
 
 CSS = """
 :root{color-scheme:light;--surface:#fcfcfb;--page:#f6f5f2;--ink:#0b0b0b;--ink2:#52514e;--rule:#e2e0da;
---grid:#ebe9e4;--s1:#2a78d6;--s2:#eb6834;--good:#0a7a0a;--bad:#c62f2e;--goodbg:#e5f4e4;--badbg:#fbebeb}
+--grid:#ebe9e4;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--good:#0a7a0a;--bad:#c62f2e;--goodbg:#e5f4e4;--badbg:#fbebeb}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--surface:#1a1a19;--page:#121211;
---ink:#f0efec;--ink2:#c3c2b7;--rule:#383835;--grid:#2c2c2a;--s1:#3987e5;--s2:#d95926;--good:#4cc04c;--bad:#ef7b7b;
+--ink:#f0efec;--ink2:#c3c2b7;--rule:#383835;--grid:#2c2c2a;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--good:#4cc04c;--bad:#ef7b7b;
 --goodbg:#173017;--badbg:#3a1b1b}}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
 font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}

@@ -90,5 +90,7 @@ main.py               runs the full pipeline
 
 - Results report (offline): `python -m evals.report` -> `reports/results.html` (self-contained; headline, gate, per-field, Sonnet vs Haiku, self-correction, exceptions, run history). Tests: `tests/test_report.py`
 
+- Webhook service (FastAPI): `python -m service` (http://127.0.0.1:8000; needs `WEBHOOK_SECRET` in `.env`). POST /documents takes the raw PDF body with `X-Signature: sha256=<HMAC-SHA256 of the body>`; id = file SHA-256 (idempotent); background route -> extract -> validate -> self-correct; GET /documents/{id}; GET /health. Results go to a run log with `split: webhook` and are appended to `exceptions_report.csv`. Send a file: `python scripts/send_doc.py data/doc_002.pdf`. Tests: `tests/test_service.py`
+
 ## Current phase
 Phase 11

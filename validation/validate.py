@@ -82,18 +82,35 @@ def validate_records(records: list[dict]) -> list[ValidationResult]:
     return sorted((validate_record(r) for r in records), key=lambda r: r.doc_id)
 
 
+def _report_rows(results: list[ValidationResult]):
+    for r in results:
+        for i in r.issues:
+            yield {"doc_id": r.doc_id, "file": r.file, "doc_type": r.doc_type or "", "rule": i.rule,
+                   "reason": i.reason, "expected": "" if i.expected is None else i.expected,
+                   "actual": "" if i.actual is None else i.actual,
+                   "difference": "" if i.difference is None else i.difference,
+                   "tolerance": "" if i.tolerance is None else i.tolerance,
+                   "confidence": "" if r.confidence is None else r.confidence}
+
+
 def write_exceptions_report(results: list[ValidationResult], path: str | Path) -> int:
-    rows = 0
+    """Rewrite the report with one row per failed check (what a pipeline run does)."""
+    rows = list(_report_rows(results))
     with Path(path).open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
         w.writeheader()
-        for r in results:
-            for i in r.issues:
-                w.writerow({"doc_id": r.doc_id, "file": r.file, "doc_type": r.doc_type or "", "rule": i.rule,
-                            "reason": i.reason, "expected": "" if i.expected is None else i.expected,
-                            "actual": "" if i.actual is None else i.actual,
-                            "difference": "" if i.difference is None else i.difference,
-                            "tolerance": "" if i.tolerance is None else i.tolerance,
-                            "confidence": "" if r.confidence is None else r.confidence})
-                rows += 1
-    return rows
+        w.writerows(rows)
+    return len(rows)
+
+
+def append_exceptions_report(results: list[ValidationResult], path: str | Path) -> int:
+    """Append rows for these results (what the webhook service does); writes the header if the file is new."""
+    path = Path(path)
+    rows = list(_report_rows(results))
+    new = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
+        if new:
+            w.writeheader()
+        w.writerows(rows)
+    return len(rows)

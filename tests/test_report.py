@@ -78,7 +78,7 @@ def test_models_and_exceptions(page):
 
 def test_history_chart_has_a_point_per_run_per_panel(page, runs):
     s7 = section(page, 7)
-    assert s7.count('<g class="pt-mark') == 3 * len(runs)
+    assert s7.count('<g class="pt-mark') == sum(3 if r["metrics"] else 2 for r in runs)  # webhook: no accuracy
     assert s7.count('<g class="pt-mark faded">') == 3 * sum(bool(r["superseded_by"]) for r in runs)
     assert "Table view of the chart" in s7
 
