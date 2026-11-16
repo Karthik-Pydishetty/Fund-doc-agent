@@ -144,8 +144,111 @@ def block_confidence(log: Path) -> str:
     return high + low  # inline block: no newline
 
 
+def _report():
+    from evals import report  # lazy: evals.report imports this module
+    return report
+
+
+def block_hard() -> str:
+    """Hard split composition and Sonnet vs. Haiku on it (baseline run + newest current run of each other model)."""
+    rep = _report()
+    runs = rep.load_runs()
+    base = regression.load_baseline(regression.BASELINES["hard"])
+    current = [r for r in runs if r["split"] == "hard" and not r["fault"] and not r["superseded_by"]]
+    sonnet = next(r for r in runs if r["name"] == base["source_log"])
+    others = {}
+    for r in current:
+        if r["model"] != sonnet["model"]:
+            others[r["model"]] = r
+    cols = [sonnet, *[others[m] for m in sorted(others)]]
+    truth = scoring.load_truth("hard")
+    types = Counter(d["doc_type"] for d in truth)
+    types = {t: types[t] for t in scoring.TYPES if types[t]}
+    broken = sum(d["expected_exception"] for d in truth)
+
+    def type_cell(r, t):
+        ok, n = _counts(r["metrics"], t)
+        return f"{_pct(ok / n)} ({ok}/{n})"
+
+    def cost_cell(r):
+        return f"${r['cost']['usd']:.4f} per run, ${r['cost']['usd'] / r['cost']['n']:.5f} per doc"
+
+    rows = [("Router accuracy", lambda r: _pct(r["metrics"]["router_accuracy"])),
+            *[(f"{t} fields", lambda r, t=t: type_cell(r, t)) for t in ("CAS", "SOI", "LETTER")],
+            ("Exception precision / recall", lambda r: f"{r['metrics']['exceptions']['precision']:.2f} / "
+                                                      f"{r['metrics']['exceptions']['recall']:.2f}"),
+            ("Tokens in / out", lambda r: f"{r['cost']['tin']:,} / {r['cost']['tout']:,}"),
+            ("Cost (list price)", cost_cell),
+            ("Latency per doc, mean / max", lambda r: f"{r['cost']['doc_mean']:.1f} s / {r['cost']['doc_max']:.1f} s")]
+    fps = sorted({fp for r in cols for fp in r["metrics"]["exceptions"]["fp"]})
+    fp_notes = []
+    for fp in fps:
+        confs = []
+        for r in cols:
+            rec = next(x for x in r["records"] if x["file"] == f"{fp}.pdf")
+            confs.append(f"{r['model']} {rec['extracted']['confidence']}")
+        fp_notes.append(f"{fp} ({'; '.join(confs)})")
+    out = [f"Hard split: {len(truth)} documents ({', '.join(f'{n} {t}' for t, n in types.items())}), "
+           f"{broken} intentionally broken, v1 prompts unchanged.", "",
+           "| Measure | " + " | ".join(f"`{r['model']}`" for r in cols) + " |",
+           "|---|" + "---|" * len(cols),
+           *[f"| {name} | " + " | ".join(fn(r) for r in cols) + " |" for name, fn in rows], "",
+           "Runs: " + ", ".join(f"`{r['name']}`" for r in cols) + f" (the first is `evals/baseline_hard.json`'s source). "
+           + (f"The only exception errors are correct documents sent to review for low self-reported confidence: "
+              f"{'; '.join(fp_notes)}." if fp_notes else "No false alarms.")]
+    return "\n".join(out) + "\n"
+
+
+def block_selfcorrect() -> str:
+    """Self-correction with seeded fault injection, before vs. after the deterministic checks."""
+    rep = _report()
+    from evals.blind_spot import outcomes
+    from evals.self_correction import analyse
+    pairs = rep.fault_pairs(rep.load_runs())
+    rows, still = [], []
+    for split, (b, a) in pairs.items():
+        for label, run in (("before checks", b), ("after checks", a)):
+            o, m = outcomes(run["path"])
+            sc = analyse(run["path"])
+            n = len(o)
+            c = {v: sum(x["verdict"] == v for x in o.values()) for v in ("recovered", "flagged", "undetected")}
+            rows.append(f"| {split} | {label} | `{run['path'].name}` | {c['recovered']}/{n} | {c['flagged']}/{n} | "
+                        f"{c['undetected']}/{n} | {len(sc['fudges'])} | {len(sc['accepted_on_broken'])} | "
+                        f"{m['precision']:.2f} / {m['recall']:.2f} | "
+                        f"${sc['retry_usd']:.4f} (+{100 * sc['retry_usd'] / sc['first_usd']:.0f}%) |")
+            if run is a:
+                still += [f"{k[0]} `{k[1]}` ({k[2]})" for k, v in o.items() if v["verdict"] == "undetected"]
+    seed = pairs and next(iter(pairs.values()))[1]["header"].get("fault_summary", {}).get("seed")
+    return ("| Split | Checks | Run | Recovered | Flagged | Undetected | Fudges rejected | "
+            "Changes accepted on broken docs | Exception P / R (docs without a fault) | Extra cost of retries |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(rows) + "\n\n"
+            f"Both runs of a split use fault seed {seed} and the same fault count, so the same faults are injected. "
+            f"Still undetected after the checks: {'; '.join(still) or 'none'}.\n")
+
+
+def block_webhook() -> str:
+    logs = []
+    for log in sorted((ROOT / "runs").glob("*_pipeline.jsonl")):
+        header, records, _ = scoring.load_log(log)
+        if scoring.split_of(header) == "webhook":
+            logs.append((log, records))
+    latest = {}
+    for _log, records in logs:
+        for rec in records:
+            latest[rec["webhook"]["document_id"]] = rec
+    if not latest:
+        return "No documents have been sent to the webhook service yet.\n"
+    status = Counter(r["webhook"]["status"] for r in latest.values())
+    lines = [f"- `{r['webhook']['filename']}` -> {r['webhook']['status']}"
+             + (f" ({', '.join(i['rule'] for i in r['validation']['issues'])})" if r["validation"]["issues"] else "")
+             for r in latest.values()]
+    return (f"Documents received so far: {len(latest)} ({', '.join(f'{n} {s}' for s, n in sorted(status.items()))}), "
+            f"logged in " + ", ".join(f"`{_rel(lg)}`" for lg, _ in logs) + ".\n\n" + "\n".join(lines) + "\n")
+
+
 def render_blocks(log: Path) -> dict[str, str]:
-    return {"results": block_results(log), "tolerances": block_tolerances(), "confidence": block_confidence(log)}
+    return {"results": block_results(log), "tolerances": block_tolerances(), "confidence": block_confidence(log),
+            "hard": block_hard(), "selfcorrect": block_selfcorrect(), "webhook": block_webhook()}
 
 
 def apply_blocks(text: str, blocks: dict[str, str]) -> str:
